@@ -1,0 +1,26 @@
+appId: io.openmd.desktop
+productName: OpenMD
+asar: true
+
+directories:
+  buildResources: resources
+  output: dist
+
+files:
+  - out/**/*
+  - package.json
+
+win:
+  target:
+    - nsis
+  artifactName: '${productName}-${version}-${arch}-setup.${ext}'
+
+mac:
+  category: public.app-category.productivity
+  target:
+    - dmg
+  artifactName: '${productName}-${version}-${arch}.${ext}'
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
