@@ -2,6 +2,7 @@
   --background: #f4f4f1;
   --foreground: #20201e;
   --surface: #ffffff;
+  --surface-subtle: #f0f0eb;
   --border: #deded8;
   --primary: #2563eb;
   --muted: #6f706b;
@@ -14,6 +15,7 @@
     --background: #191a1b;
     --foreground: #eeeeea;
     --surface: #222426;
+    --surface-subtle: #2b2d30;
     --border: #373a3d;
     --primary: #78a7ff;
     --muted: #a1a4a6;
@@ -26,6 +28,7 @@
   --background: #f4f4f1;
   --foreground: #20201e;
   --surface: #ffffff;
+  --surface-subtle: #f0f0eb;
   --border: #deded8;
   --primary: #2563eb;
   --muted: #6f706b;
@@ -37,6 +40,7 @@
   --background: #191a1b;
   --foreground: #eeeeea;
   --surface: #222426;
+  --surface-subtle: #2b2d30;
   --border: #373a3d;
   --primary: #78a7ff;
   --muted: #a1a4a6;

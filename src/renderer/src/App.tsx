@@ -3,11 +3,12 @@ import type { JSX } from 'react'
 
 import { StatusBar } from './components/StatusBar'
 import { TitleBar } from './components/TitleBar'
-import { EditorPlaceholder } from './editor/EditorPlaceholder'
+import { OpenMdEditor } from './editor/OpenMdEditor'
 import { useAppStore } from './stores/app-store'
 
 function App(): JSX.Element {
   const theme = useAppStore((state) => state.theme)
+  const updateMarkdown = useAppStore((state) => state.updateMarkdown)
 
   useEffect(() => {
     const colorScheme = window.matchMedia('(prefers-color-scheme: dark)')
@@ -30,7 +31,10 @@ function App(): JSX.Element {
     <div className="app-shell">
       <TitleBar />
       <main className="workspace" aria-label="编辑工作区">
-        <EditorPlaceholder />
+        <OpenMdEditor
+          initialMarkdown={useAppStore.getState().document.markdown}
+          onChange={updateMarkdown}
+        />
       </main>
       <StatusBar />
     </div>
