@@ -2,6 +2,8 @@ import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import { editorViewCtx } from '@milkdown/kit/core'
 import { replaceAll } from '@milkdown/kit/utils'
 
+import { headingSourcePlugin } from './heading-source-plugin'
+
 export interface EditorAdapterOptions {
   root: HTMLElement
   initialMarkdown: string
@@ -31,6 +33,7 @@ export class OpenMdEditorAdapter {
         [CrepeFeature.Placeholder]: { text: '开始写作…' },
       },
     })
+    this.crepe.editor.use(headingSourcePlugin)
 
     this.crepe.setReadonly(options.readOnly).on((listener) => {
       listener.markdownUpdated((_ctx, markdown) => {

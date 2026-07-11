@@ -148,6 +148,18 @@ select {
   letter-spacing: -0.025em;
 }
 
+.openmd-heading-marker {
+  color: var(--syntax-marker);
+  font-size: 0.72em;
+  font-weight: 500;
+  letter-spacing: 0;
+  user-select: none;
+}
+
+.openmd-active-heading {
+  caret-color: var(--primary);
+}
+
 .openmd-editor .ProseMirror code {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 }
