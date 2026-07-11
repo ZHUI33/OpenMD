@@ -34,6 +34,11 @@ interface MarkerBoundary {
   closeLength: number
 }
 
+interface EditableInlineMarker extends HTMLElement {
+  openmdDeleteBackward: () => void
+  openmdDeleteForward: () => void
+}
+
 const inlineMarkNames = new Set(['strong', 'emphasis', 'strike_through', 'inlineCode', 'link'])
 
 const inlineSourceKey = new PluginKey<InlineSourceState>('openmd-inline-source')
@@ -209,6 +214,67 @@ function placeNativeCaret(element: HTMLElement, offset: number): void {
   selection?.addRange(range)
 }
 
+function nativeCaretTouchesMarker(
+  view: EditorView,
+  marker: HTMLElement,
+  side: 'before' | 'after',
+): boolean {
+  const selection = window.getSelection()
+  if (!selection?.isCollapsed || selection.rangeCount === 0) return false
+  const caret = selection.getRangeAt(0)
+  if (!view.dom.contains(caret.startContainer) || marker.contains(caret.startContainer)) {
+    return false
+  }
+
+  const widget = marker.closest('.ProseMirror-widget') ?? marker
+  const markerBoundary = document.createRange()
+  markerBoundary.selectNode(widget)
+  markerBoundary.collapse(side === 'before')
+  const relation = caret.compareBoundaryPoints(Range.START_TO_START, markerBoundary)
+  if ((side === 'after' && relation < 0) || (side === 'before' && relation > 0)) {
+    return false
+  }
+
+  const gap = document.createRange()
+  try {
+    if (side === 'after') {
+      gap.setStartAfter(widget)
+      gap.setEnd(caret.startContainer, caret.startOffset)
+    } else {
+      gap.setStart(caret.startContainer, caret.startOffset)
+      gap.setEndBefore(widget)
+    }
+  } catch {
+    return false
+  }
+  return gap.toString().length === 0
+}
+
+function handleMarkerBoundaryDelete(view: EditorView, event: KeyboardEvent): boolean {
+  if (
+    !view.state.selection.empty ||
+    (event.key !== 'Backspace' && event.key !== 'Delete') ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey
+  ) {
+    return false
+  }
+
+  const position = view.state.selection.from
+  const markers = view.dom.querySelectorAll<EditableInlineMarker>(
+    `.openmd-inline-marker[data-boundary-position="${position}"]`,
+  )
+  const side = event.key === 'Backspace' ? 'after' : 'before'
+  const marker = [...markers].find((candidate) => nativeCaretTouchesMarker(view, candidate, side))
+  if (!marker || !marker.textContent) return false
+
+  event.preventDefault()
+  if (event.key === 'Backspace') marker.openmdDeleteBackward()
+  else marker.openmdDeleteForward()
+  return true
+}
+
 function selectionIsInsideNode(
   state: EditorState,
   position: number,
@@ -278,6 +344,18 @@ function createEditableMarker(
       nextMarker,
       caretOffset,
     )
+  }
+
+  const editableMarker = marker as EditableInlineMarker
+  editableMarker.openmdDeleteBackward = () => {
+    const current = marker.textContent ?? ''
+    if (!current) return
+    applyMarker(current.slice(0, -1), current.length - 1)
+  }
+  editableMarker.openmdDeleteForward = () => {
+    const current = marker.textContent ?? ''
+    if (!current) return
+    applyMarker(current.slice(1), 0)
   }
 
   marker.addEventListener('keydown', (event) => {
@@ -601,6 +679,9 @@ export const inlineSourcePlugin = $prose((ctx) => {
       decorations: (state) => inlineSourceKey.getState(state)?.decorations,
       handleKeyDown: (view, event) => {
         if (!view.editable || event.isComposing) return false
+        if (!isInlineSourceEditing(view.state) && handleMarkerBoundaryDelete(view, event)) {
+          return true
+        }
         if (event.key !== 'Enter' || !isInlineSourceEditing(view.state)) return false
 
         event.preventDefault()

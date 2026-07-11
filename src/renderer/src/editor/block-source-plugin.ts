@@ -28,11 +28,17 @@ interface TopLevelBlock {
 
 interface SourceMarker {
   documentPosition: number
+  selectionPosition?: number
   source: string
   sourceFrom: number
   sourceTo: number
   className?: string
   side?: number
+}
+
+interface EditableBlockMarker extends HTMLElement {
+  openmdDeleteBackward: () => void
+  openmdDeleteForward: () => void
 }
 
 const supportedBlockNames = new Set([
@@ -144,6 +150,7 @@ function collectCodeMarkers(
   return [
     {
       documentPosition: block.position,
+      selectionPosition: block.position + 1,
       source,
       sourceFrom: 0,
       sourceTo: firstLineEnd,
@@ -152,6 +159,7 @@ function collectCodeMarkers(
     },
     {
       documentPosition: block.position + block.node.nodeSize,
+      selectionPosition: block.position + block.node.nodeSize - 1,
       source,
       sourceFrom: lastLineStart,
       sourceTo: source.length,
@@ -221,6 +229,67 @@ function placeNativeCaret(element: HTMLElement, offset: number): void {
   selection?.addRange(range)
 }
 
+function nativeCaretTouchesMarker(
+  view: EditorView,
+  marker: HTMLElement,
+  side: 'before' | 'after',
+): boolean {
+  const selection = window.getSelection()
+  if (!selection?.isCollapsed || selection.rangeCount === 0) return false
+  const caret = selection.getRangeAt(0)
+  if (!view.dom.contains(caret.startContainer) || marker.contains(caret.startContainer)) {
+    return false
+  }
+
+  const widget = marker.closest('.ProseMirror-widget') ?? marker
+  const markerBoundary = document.createRange()
+  markerBoundary.selectNode(widget)
+  markerBoundary.collapse(side === 'before')
+  const relation = caret.compareBoundaryPoints(Range.START_TO_START, markerBoundary)
+  if ((side === 'after' && relation < 0) || (side === 'before' && relation > 0)) {
+    return false
+  }
+
+  const gap = document.createRange()
+  try {
+    if (side === 'after') {
+      gap.setStartAfter(widget)
+      gap.setEnd(caret.startContainer, caret.startOffset)
+    } else {
+      gap.setStart(caret.startContainer, caret.startOffset)
+      gap.setEndBefore(widget)
+    }
+  } catch {
+    return false
+  }
+  return gap.toString().length === 0
+}
+
+function handleMarkerBoundaryDelete(view: EditorView, event: KeyboardEvent): boolean {
+  if (
+    !view.state.selection.empty ||
+    (event.key !== 'Backspace' && event.key !== 'Delete') ||
+    event.altKey ||
+    event.ctrlKey ||
+    event.metaKey
+  ) {
+    return false
+  }
+
+  const position = view.state.selection.from
+  const markers = view.dom.querySelectorAll<EditableBlockMarker>(
+    `.openmd-block-marker[data-boundary-position="${position}"]`,
+  )
+  const side = event.key === 'Backspace' ? 'after' : 'before'
+  const marker = [...markers].find((candidate) => nativeCaretTouchesMarker(view, candidate, side))
+  if (!marker || !marker.textContent) return false
+
+  event.preventDefault()
+  if (event.key === 'Backspace') marker.openmdDeleteBackward()
+  else marker.openmdDeleteForward()
+  return true
+}
+
 function startBlockSourceEditing(
   view: EditorView,
   blockPosition: number,
@@ -263,6 +332,9 @@ function createEditableMarker(
   const marker = document.createElement('span')
   const originalMarker = sourceMarker.source.slice(sourceMarker.sourceFrom, sourceMarker.sourceTo)
   marker.className = sourceMarker.className ?? 'openmd-block-marker'
+  marker.dataset.boundaryPosition = String(
+    sourceMarker.selectionPosition ?? sourceMarker.documentPosition,
+  )
   marker.textContent = originalMarker
   marker.contentEditable = String(view.editable)
   marker.tabIndex = -1
@@ -280,6 +352,18 @@ function createEditableMarker(
       nextMarker,
       caretOffset,
     )
+  }
+
+  const editableMarker = marker as EditableBlockMarker
+  editableMarker.openmdDeleteBackward = () => {
+    const current = marker.textContent ?? ''
+    if (!current) return
+    applyMarker(current.slice(0, -1), current.length - 1)
+  }
+  editableMarker.openmdDeleteForward = () => {
+    const current = marker.textContent ?? ''
+    if (!current) return
+    applyMarker(current.slice(1), 0)
   }
 
   marker.addEventListener('keydown', (event) => {
@@ -630,9 +714,8 @@ export const blockSourcePlugin = $prose((ctx) => {
     props: {
       decorations: (state) => blockSourceKey.getState(state)?.decorations,
       handleKeyDown: (view, event) => {
-        if (!view.editable || event.isComposing || !isBlockSourceEditing(view.state)) {
-          return false
-        }
+        if (!view.editable || event.isComposing) return false
+        if (!isBlockSourceEditing(view.state)) return handleMarkerBoundaryDelete(view, event)
         if (event.key === 'Escape') {
           event.preventDefault()
           return cancelBlockSourceEditing(view)
