@@ -1,8 +1,10 @@
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
-import { editorViewCtx } from '@milkdown/kit/core'
+import { editorViewCtx, remarkStringifyOptionsCtx, serializerCtx } from '@milkdown/kit/core'
 import { replaceAll } from '@milkdown/kit/utils'
 
-import { headingSourcePlugin } from './heading-source-plugin'
+import { blockSourcePlugin, isBlockSourceEditing } from './block-source-plugin'
+import { headingSourcePlugin, isHeadingSourceEditing } from './heading-source-plugin'
+import { inlineSourcePlugin, isInlineSourceEditing } from './inline-source-plugin'
 
 export interface EditorAdapterOptions {
   root: HTMLElement
@@ -24,6 +26,8 @@ export class OpenMdEditorAdapter {
       root: options.root,
       defaultValue: options.initialMarkdown,
       features: {
+        [CrepeFeature.CodeMirror]: false,
+        [CrepeFeature.LinkTooltip]: false,
         [CrepeFeature.Toolbar]: false,
         [CrepeFeature.ImageBlock]: false,
         [CrepeFeature.Table]: false,
@@ -33,10 +37,34 @@ export class OpenMdEditorAdapter {
         [CrepeFeature.Placeholder]: { text: '开始写作…' },
       },
     })
+    this.crepe.editor.config((ctx) => {
+      ctx.update(remarkStringifyOptionsCtx, (options) => ({
+        ...options,
+        bullet: '-' as const,
+        fence: '`' as const,
+        fences: true,
+        rule: '-' as const,
+        ruleRepetition: 3,
+        ruleSpaces: false,
+      }))
+    })
     this.crepe.editor.use(headingSourcePlugin)
+    this.crepe.editor.use(inlineSourcePlugin)
+    this.crepe.editor.use(blockSourcePlugin)
 
     this.crepe.setReadonly(options.readOnly).on((listener) => {
-      listener.markdownUpdated((_ctx, markdown) => {
+      listener.markdownUpdated((ctx, markdown) => {
+        const state = ctx.get(editorViewCtx).state
+        // Milkdown debounces listener transactions. A source draft can already
+        // have been committed or cancelled when an older callback arrives.
+        if (ctx.get(serializerCtx)(state.doc) !== markdown) return
+        if (
+          isHeadingSourceEditing(state) ||
+          isInlineSourceEditing(state) ||
+          isBlockSourceEditing(state)
+        ) {
+          return
+        }
         this.markdown = markdown
         if (!this.applyingMarkdown) options.onChange(markdown)
       })

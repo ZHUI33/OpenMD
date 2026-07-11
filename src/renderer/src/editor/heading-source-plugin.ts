@@ -25,6 +25,10 @@ interface ParsedHeadingSource {
 
 const headingSourceKey = new PluginKey<HeadingSourceState>('openmd-heading-source')
 
+export function isHeadingSourceEditing(state: EditorState): boolean {
+  return headingSourceKey.getState(state)?.editingPosition != null
+}
+
 function parseHeadingSource(paragraph: ProseMirrorNode): ParsedHeadingSource | undefined {
   if (paragraph.type.name !== 'paragraph') return undefined
   const match = /^( {0,3})(#{1,6})(?:[\t ]+|$)/.exec(paragraph.textContent)
@@ -424,7 +428,10 @@ export const headingSourcePlugin = $prose(
               if (!heading || heading.type.name !== 'heading' || !paragraphType) return true
               const nextPosition = editingPosition + heading.nodeSize
               const transaction = closeHistory(view.state.tr)
-              transaction.insert(nextPosition, paragraphType.create())
+              const nextNode = transaction.doc.nodeAt(nextPosition)
+              if (nextNode?.type !== paragraphType || nextNode.content.size > 0) {
+                transaction.insert(nextPosition, paragraphType.create())
+              }
               transaction.setSelection(TextSelection.create(transaction.doc, nextPosition + 1))
               transaction.scrollIntoView()
               view.dispatch(transaction)

@@ -1,4 +1,5 @@
 @import './theme.css';
+@import '@milkdown/crepe/theme/common/style.css';
 @import '@milkdown/crepe/theme/classic.css';
 
 * {
@@ -125,6 +126,14 @@ select {
   --crepe-color-outline: var(--border);
   --crepe-color-primary: var(--primary);
   --crepe-color-secondary: var(--primary);
+  --crepe-color-on-secondary: var(--surface);
+  --crepe-color-inline-code: var(--foreground);
+  --crepe-color-inline-area: var(--surface-subtle);
+  --crepe-color-hover: var(--surface-subtle);
+  --crepe-color-selected: var(--primary-soft);
+  --crepe-font-default: inherit;
+  --crepe-font-title: inherit;
+  --crepe-font-code: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 }
 
 .openmd-editor .ProseMirror {
@@ -148,11 +157,18 @@ select {
   letter-spacing: -0.025em;
 }
 
-.openmd-heading-marker {
+.openmd-heading-marker,
+.openmd-inline-marker,
+.openmd-block-marker {
   color: var(--syntax-marker);
-  font-size: 0.72em;
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 0.8em;
+  font-style: normal;
   font-weight: 500;
+  line-height: inherit;
   letter-spacing: 0;
+  text-decoration: none;
+  white-space: pre;
   user-select: text;
 }
 
@@ -162,6 +178,107 @@ select {
 
 .openmd-editor .ProseMirror code {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+}
+
+.openmd-editor .ProseMirror p {
+  line-height: 1.7;
+}
+
+.openmd-editor .ProseMirror blockquote {
+  color: var(--muted);
+}
+
+.openmd-editor .ProseMirror pre {
+  margin: 8px 0;
+  padding: 14px 16px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--foreground);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+}
+
+.openmd-editor .ProseMirror pre code {
+  display: inline;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.openmd-editor .ProseMirror hr {
+  margin: 12px 0;
+}
+
+.openmd-editor .ProseMirror .milkdown-list-item-block > .list-item > .children > p {
+  min-height: 32px;
+  padding: 4px 0;
+}
+
+.openmd-inline-marker,
+.openmd-block-marker {
+  border-radius: 3px;
+  caret-color: var(--primary);
+}
+
+.openmd-inline-marker:focus,
+.openmd-block-marker:focus {
+  background: var(--primary-soft);
+  color: var(--foreground);
+}
+
+.openmd-active-inline-source {
+  caret-color: var(--primary);
+}
+
+.openmd-markdown-source,
+.openmd-block-markdown-source {
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--surface-subtle) 74%, transparent);
+  caret-color: var(--primary);
+  color: var(--foreground);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 14px !important;
+  line-height: 1.7 !important;
+  white-space: pre-wrap;
+}
+
+.openmd-markdown-source {
+  padding-inline: 5px !important;
+}
+
+.openmd-editor .ProseMirror pre.openmd-block-markdown-source {
+  outline: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
+  background: var(--surface-subtle);
+}
+
+.openmd-active-bullet_list .label-wrapper,
+.openmd-active-ordered_list .label-wrapper {
+  display: none !important;
+}
+
+.openmd-active-bullet_list li,
+.openmd-active-ordered_list li {
+  gap: 0 !important;
+}
+
+.openmd-code-fence-marker {
+  display: block;
+  width: 100%;
+  padding: 2px 8px;
+  background: var(--surface-subtle);
+  font-size: 13px;
+}
+
+.openmd-hr-marker {
+  display: block;
+  padding: 2px 0;
+}
+
+.openmd-editor .ProseMirror hr.openmd-active-hr {
+  display: none;
 }
 
 .editor-placeholder {
