@@ -48,6 +48,17 @@ export function isInlineSourceEditing(state: EditorState): boolean {
   return inlineSourceKey.getState(state)?.editingPosition != null
 }
 
+export function commitInlineSourceEditing(view: EditorView): boolean {
+  if (!isInlineSourceEditing(view.state)) return false
+
+  view.dispatch(
+    view.state.tr.setMeta(inlineSourceKey, {
+      type: 'request-finish',
+    } satisfies InlineSourceMeta),
+  )
+  return true
+}
+
 function trimSerializedBlock(markdown: string): string {
   return markdown.replace(/\r?\n$/, '')
 }

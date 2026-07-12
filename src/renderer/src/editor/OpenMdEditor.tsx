@@ -22,8 +22,24 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
   useImperativeHandle(
     forwardedRef,
     () => ({
-      getMarkdown: () => adapterRef.current?.getMarkdown() ?? initialMarkdownRef.current,
-      setMarkdown: (markdown) => adapterRef.current?.setMarkdown(markdown),
+      getMarkdown: () => {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current)
+          timerRef.current = null
+        }
+        const markdown = adapterRef.current?.getMarkdown() ?? initialMarkdownRef.current
+        initialMarkdownRef.current = markdown
+        return markdown
+      },
+      setMarkdown: (markdown) => {
+        if (timerRef.current) {
+          clearTimeout(timerRef.current)
+          timerRef.current = null
+        }
+        initialMarkdownRef.current = markdown
+        adapterRef.current?.setMarkdown(markdown)
+      },
+      setReadOnly: (nextReadOnly) => adapterRef.current?.setReadOnly(nextReadOnly),
       focus: () => adapterRef.current?.focus(),
     }),
     [],
@@ -39,7 +55,10 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
       readOnly: initialReadOnlyRef.current,
       onChange: (markdown) => {
         if (timerRef.current) clearTimeout(timerRef.current)
-        timerRef.current = setTimeout(() => onChangeRef.current?.(markdown), CHANGE_DEBOUNCE_MS)
+        timerRef.current = setTimeout(() => {
+          timerRef.current = null
+          onChangeRef.current?.(markdown)
+        }, CHANGE_DEBOUNCE_MS)
       },
     })
     adapterRef.current = adapter

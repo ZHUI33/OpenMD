@@ -56,6 +56,7 @@ select {
 
 .brand {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 10px;
   font-weight: 700;
@@ -74,6 +75,9 @@ select {
 }
 
 .brand-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 15px;
 }
 

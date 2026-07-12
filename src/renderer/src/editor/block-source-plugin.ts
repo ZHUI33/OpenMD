@@ -56,6 +56,17 @@ export function isBlockSourceEditing(state: EditorState): boolean {
   return blockSourceKey.getState(state)?.editingPosition != null
 }
 
+export function commitBlockSourceEditing(view: EditorView): boolean {
+  if (!isBlockSourceEditing(view.state)) return false
+
+  view.dispatch(
+    view.state.tr.setMeta(blockSourceKey, {
+      type: 'request-finish',
+    } satisfies BlockSourceMeta),
+  )
+  return true
+}
+
 function trimSerializedBlock(markdown: string): string {
   return markdown.replace(/\r?\n$/, '')
 }

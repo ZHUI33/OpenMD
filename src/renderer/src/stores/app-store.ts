@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 
+import type { SaveDocumentResult } from '../../../shared/desktop-api.types'
+
 export type Theme = 'light' | 'dark' | 'system'
 
 export interface AppState {
@@ -10,6 +12,8 @@ export interface AppState {
 
 export interface DocumentState {
   markdown: string
+  savedMarkdown: string
+  filePath?: string
   dirty: boolean
   wordCount: number
   characterCount: number
@@ -20,7 +24,8 @@ interface AppActions {
   setSidebarVisible: (visible: boolean) => void
   toggleSidebar: () => void
   updateMarkdown: (markdown: string) => void
-  setDocument: (markdown: string) => void
+  setDocument: (markdown: string, filePath?: string) => void
+  applySaveResult: (result: SaveDocumentResult, savedMarkdown: string) => void
 }
 
 type AppStore = AppState & AppActions
@@ -56,10 +61,21 @@ export function countCharacters(markdown: string): number {
   return Array.from(markdown).length
 }
 
-function createDocumentState(markdown: string, dirty: boolean): DocumentState {
+interface CreateDocumentStateOptions {
+  savedMarkdown?: string
+  filePath?: string
+  forceDirty?: boolean
+}
+
+function createDocumentState(
+  markdown: string,
+  { savedMarkdown = markdown, filePath, forceDirty = false }: CreateDocumentStateOptions = {},
+): DocumentState {
   return {
     markdown,
-    dirty,
+    savedMarkdown,
+    filePath,
+    dirty: forceDirty || markdown !== savedMarkdown,
     wordCount: countWords(markdown),
     characterCount: countCharacters(markdown),
   }
@@ -68,7 +84,7 @@ function createDocumentState(markdown: string, dirty: boolean): DocumentState {
 const initialState: AppState = {
   theme: 'system',
   sidebarVisible: false,
-  document: createDocumentState(WELCOME_MARKDOWN, false),
+  document: createDocumentState(WELCOME_MARKDOWN),
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -86,10 +102,36 @@ export const useAppStore = create<AppStore>((set) => ({
     set((state) =>
       state.document.markdown === markdown
         ? state
-        : { document: createDocumentState(markdown, true) },
+        : {
+            document: createDocumentState(markdown, {
+              savedMarkdown: state.document.savedMarkdown,
+              filePath: state.document.filePath,
+            }),
+          },
     )
   },
-  setDocument: (markdown) => {
-    set({ document: createDocumentState(markdown, false) })
+  setDocument: (markdown, filePath) => {
+    set({ document: createDocumentState(markdown, { filePath }) })
+  },
+  applySaveResult: (result, savedMarkdown) => {
+    set((state) => {
+      if (result.canceled) return state
+      if (result.error || !result.filePath) {
+        return {
+          document: createDocumentState(state.document.markdown, {
+            savedMarkdown: state.document.savedMarkdown,
+            filePath: state.document.filePath,
+            forceDirty: true,
+          }),
+        }
+      }
+
+      return {
+        document: createDocumentState(state.document.markdown, {
+          savedMarkdown,
+          filePath: result.filePath,
+        }),
+      }
+    })
   },
 }))

@@ -1,8 +1,8 @@
-import type { DesktopApi } from '../../../shared/desktop-api.types'
+import type { OpenMdApi } from '../../../shared/desktop-api.types'
 
 declare global {
   interface Window {
-    desktop: DesktopApi
+    openmd: OpenMdApi
   }
 }
 

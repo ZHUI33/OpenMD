@@ -29,6 +29,17 @@ export function isHeadingSourceEditing(state: EditorState): boolean {
   return headingSourceKey.getState(state)?.editingPosition != null
 }
 
+export function commitHeadingSourceEditing(view: EditorView): boolean {
+  if (!isHeadingSourceEditing(view.state)) return false
+
+  view.dispatch(
+    view.state.tr.setMeta(headingSourceKey, {
+      type: 'request-finish',
+    } satisfies HeadingSourceMeta),
+  )
+  return true
+}
+
 function parseHeadingSource(paragraph: ProseMirrorNode): ParsedHeadingSource | undefined {
   if (paragraph.type.name !== 'paragraph') return undefined
   const match = /^( {0,3})(#{1,6})(?:[\t ]+|$)/.exec(paragraph.textContent)

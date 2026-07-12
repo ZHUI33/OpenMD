@@ -1,5 +1,5 @@
 import { contextBridge } from 'electron'
 
-import { desktopApi } from './desktop-api'
+import { openMdApi } from './desktop-api'
 
-contextBridge.exposeInMainWorld('desktop', desktopApi)
+contextBridge.exposeInMainWorld('openmd', openMdApi)

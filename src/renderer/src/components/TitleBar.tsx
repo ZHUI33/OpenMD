@@ -1,11 +1,14 @@
 import type { ChangeEvent, JSX } from 'react'
 
+import { formatDocumentTitle } from '../../../shared/document-utils'
 import { useAppStore } from '../stores/app-store'
 import type { Theme } from '../stores/app-store'
 
 export function TitleBar(): JSX.Element {
   const theme = useAppStore((state) => state.theme)
   const setTheme = useAppStore((state) => state.setTheme)
+  const dirty = useAppStore((state) => state.document.dirty)
+  const filePath = useAppStore((state) => state.document.filePath)
 
   const handleThemeChange = (event: ChangeEvent<HTMLSelectElement>): void => {
     setTheme(event.currentTarget.value as Theme)
@@ -17,7 +20,7 @@ export function TitleBar(): JSX.Element {
         <span className="brand-mark" aria-hidden="true">
           M
         </span>
-        <span className="brand-name">OpenMD</span>
+        <span className="brand-name">{formatDocumentTitle(filePath, dirty)}</span>
       </div>
 
       <label className="theme-control">

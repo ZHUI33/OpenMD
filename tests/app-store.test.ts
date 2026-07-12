@@ -7,19 +7,23 @@ import {
   useAppStore,
 } from '../src/renderer/src/stores/app-store'
 
-describe('app store', () => {
-  beforeEach(() => {
-    useAppStore.setState({
-      theme: 'system',
-      sidebarVisible: false,
-      document: {
-        markdown: WELCOME_MARKDOWN,
-        dirty: false,
-        wordCount: countWords(WELCOME_MARKDOWN),
-        characterCount: countCharacters(WELCOME_MARKDOWN),
-      },
-    })
+function resetStore(): void {
+  useAppStore.setState({
+    theme: 'system',
+    sidebarVisible: false,
+    document: {
+      markdown: WELCOME_MARKDOWN,
+      savedMarkdown: WELCOME_MARKDOWN,
+      filePath: undefined,
+      dirty: false,
+      wordCount: countWords(WELCOME_MARKDOWN),
+      characterCount: countCharacters(WELCOME_MARKDOWN),
+    },
   })
+}
+
+describe('app store', () => {
+  beforeEach(resetStore)
 
   it('uses the required initial application state', () => {
     const state = useAppStore.getState()
@@ -27,6 +31,8 @@ describe('app store', () => {
     expect(state.theme).toBe('system')
     expect(state.sidebarVisible).toBe(false)
     expect(state.document.markdown).toBe(WELCOME_MARKDOWN)
+    expect(state.document.savedMarkdown).toBe(WELCOME_MARKDOWN)
+    expect(state.document.filePath).toBeUndefined()
     expect(state.document.dirty).toBe(false)
   })
 
@@ -60,14 +66,95 @@ describe('app store', () => {
     expect(document.characterCount).toBe(18)
   })
 
-  it('initializes a loaded Markdown document as clean', () => {
-    useAppStore.getState().setDocument('## Initial Markdown')
+  it('becomes clean again when content returns to the saved Markdown', () => {
+    useAppStore.getState().setDocument('saved', 'C:\\notes\\draft.md')
+    useAppStore.getState().updateMarkdown('changed')
+    useAppStore.getState().updateMarkdown('saved')
+
+    expect(useAppStore.getState().document.dirty).toBe(false)
+  })
+
+  it('initializes a loaded Markdown document and path as clean', () => {
+    useAppStore.getState().setDocument('## Initial Markdown', 'C:\\notes\\initial.md')
 
     expect(useAppStore.getState().document).toEqual({
       markdown: '## Initial Markdown',
+      savedMarkdown: '## Initial Markdown',
+      filePath: 'C:\\notes\\initial.md',
       dirty: false,
       wordCount: 2,
       characterCount: 19,
+    })
+  })
+
+  it('creates a clean blank document without a file path', () => {
+    useAppStore.getState().setDocument('old content', 'C:\\notes\\old.md')
+    useAppStore.getState().setDocument('')
+
+    expect(useAppStore.getState().document).toEqual({
+      markdown: '',
+      savedMarkdown: '',
+      filePath: undefined,
+      dirty: false,
+      wordCount: 0,
+      characterCount: 0,
+    })
+  })
+
+  it('marks the saved snapshot clean and updates the path after a successful save', () => {
+    useAppStore.getState().setDocument('original', 'C:\\notes\\old.md')
+    useAppStore.getState().updateMarkdown('updated')
+
+    useAppStore
+      .getState()
+      .applySaveResult({ canceled: false, filePath: 'C:\\notes\\renamed.md' }, 'updated')
+
+    expect(useAppStore.getState().document).toMatchObject({
+      markdown: 'updated',
+      savedMarkdown: 'updated',
+      filePath: 'C:\\notes\\renamed.md',
+      dirty: false,
+    })
+  })
+
+  it('leaves content, path, and dirty state unchanged when saving is canceled', () => {
+    useAppStore.getState().setDocument('original', 'C:\\notes\\draft.md')
+    useAppStore.getState().updateMarkdown('unsaved')
+    const beforeCancel = useAppStore.getState().document
+
+    useAppStore.getState().applySaveResult({ canceled: true }, 'unsaved')
+
+    expect(useAppStore.getState().document).toEqual(beforeCancel)
+  })
+
+  it('keeps the document dirty after a failed save', () => {
+    useAppStore.getState().setDocument('original', 'C:\\notes\\draft.md')
+    useAppStore.getState().updateMarkdown('unsaved')
+
+    useAppStore.getState().applySaveResult({ canceled: false, error: true }, 'unsaved')
+
+    expect(useAppStore.getState().document).toMatchObject({
+      markdown: 'unsaved',
+      savedMarkdown: 'original',
+      filePath: 'C:\\notes\\draft.md',
+      dirty: true,
+    })
+  })
+
+  it('keeps later edits dirty when a previous snapshot finishes saving', () => {
+    useAppStore.getState().setDocument('original', 'C:\\notes\\draft.md')
+    useAppStore.getState().updateMarkdown('submitted snapshot')
+    useAppStore.getState().updateMarkdown('edited while saving')
+
+    useAppStore
+      .getState()
+      .applySaveResult({ canceled: false, filePath: 'C:\\notes\\draft.md' }, 'submitted snapshot')
+
+    expect(useAppStore.getState().document).toMatchObject({
+      markdown: 'edited while saving',
+      savedMarkdown: 'submitted snapshot',
+      filePath: 'C:\\notes\\draft.md',
+      dirty: true,
     })
   })
 })

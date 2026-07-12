@@ -33,7 +33,7 @@ export default tseslint.config(
           paths: [
             {
               name: 'electron',
-              message: 'Use the typed window.desktop preload API instead.',
+              message: 'Use the typed window.openmd preload API instead.',
             },
             {
               name: 'fs',
@@ -45,6 +45,10 @@ export default tseslint.config(
             },
           ],
           patterns: [
+            {
+              group: ['electron/*', 'fs/*', 'path/*'],
+              message: 'Use the typed window.openmd preload API instead.',
+            },
             {
               group: ['node:*'],
               message: 'Node.js APIs are not available in the renderer.',

@@ -1,10 +1,23 @@
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import { editorViewCtx, remarkStringifyOptionsCtx, serializerCtx } from '@milkdown/kit/core'
 import { replaceAll } from '@milkdown/kit/utils'
+import type { Node as ProseMirrorNode } from '@milkdown/prose/model'
 
-import { blockSourcePlugin, isBlockSourceEditing } from './block-source-plugin'
-import { headingSourcePlugin, isHeadingSourceEditing } from './heading-source-plugin'
-import { inlineSourcePlugin, isInlineSourceEditing } from './inline-source-plugin'
+import {
+  blockSourcePlugin,
+  commitBlockSourceEditing,
+  isBlockSourceEditing,
+} from './block-source-plugin'
+import {
+  commitHeadingSourceEditing,
+  headingSourcePlugin,
+  isHeadingSourceEditing,
+} from './heading-source-plugin'
+import {
+  commitInlineSourceEditing,
+  inlineSourcePlugin,
+  isInlineSourceEditing,
+} from './inline-source-plugin'
 
 export interface EditorAdapterOptions {
   root: HTMLElement
@@ -16,7 +29,8 @@ export interface EditorAdapterOptions {
 export class OpenMdEditorAdapter {
   private readonly crepe: Crepe
   private markdown: string
-  private applyingMarkdown = false
+  private markdownDocument: ProseMirrorNode | null = null
+  private programmaticDocument: ProseMirrorNode | null = null
   private destroyed = false
   private created = false
 
@@ -65,8 +79,12 @@ export class OpenMdEditorAdapter {
         ) {
           return
         }
+        if (this.programmaticDocument?.eq(state.doc)) return
+
+        this.programmaticDocument = null
         this.markdown = markdown
-        if (!this.applyingMarkdown) options.onChange(markdown)
+        this.markdownDocument = state.doc
+        options.onChange(markdown)
       })
     })
   }
@@ -78,26 +96,61 @@ export class OpenMdEditorAdapter {
       await this.destroyEditor()
       return
     }
-    if (this.crepe.getMarkdown() !== this.markdown) this.applyMarkdown(this.markdown)
+    if (this.crepe.getMarkdown() !== this.markdown) {
+      this.applyMarkdown(this.markdown)
+    } else {
+      this.captureMarkdownDocument()
+    }
   }
 
   getMarkdown(): string {
+    if (!this.created || this.destroyed) return this.markdown
+
+    this.crepe.editor.action((ctx) => {
+      const view = ctx.get(editorViewCtx)
+      commitHeadingSourceEditing(view)
+      commitInlineSourceEditing(view)
+      commitBlockSourceEditing(view)
+
+      const document = view.state.doc
+      if (this.markdownDocument?.eq(document)) return
+
+      this.programmaticDocument = null
+      this.markdown = ctx.get(serializerCtx)(document)
+      this.markdownDocument = document
+    })
     return this.markdown
   }
 
   setMarkdown(markdown: string): void {
-    if (markdown === this.markdown || this.destroyed) return
+    if (this.destroyed) return
+    if (markdown === this.markdown && this.currentDocumentMatchesMarkdown()) return
 
     this.markdown = markdown
     if (this.created) this.applyMarkdown(markdown)
   }
 
   private applyMarkdown(markdown: string): void {
-    this.applyingMarkdown = true
     this.crepe.editor.action(replaceAll(markdown, true))
-    queueMicrotask(() => {
-      this.applyingMarkdown = false
+    this.captureMarkdownDocument(true)
+  }
+
+  private captureMarkdownDocument(programmatic = false): void {
+    this.crepe.editor.action((ctx) => {
+      const document = ctx.get(editorViewCtx).state.doc
+      this.markdownDocument = document
+      this.programmaticDocument = programmatic ? document : null
     })
+  }
+
+  private currentDocumentMatchesMarkdown(): boolean {
+    if (!this.created) return true
+
+    let matches = false
+    this.crepe.editor.action((ctx) => {
+      matches = this.markdownDocument?.eq(ctx.get(editorViewCtx).state.doc) ?? false
+    })
+    return matches
   }
 
   setReadOnly(readOnly: boolean): void {
