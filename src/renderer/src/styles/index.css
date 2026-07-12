@@ -131,8 +131,8 @@ select {
   --crepe-color-primary: var(--primary);
   --crepe-color-secondary: var(--primary);
   --crepe-color-on-secondary: var(--surface);
-  --crepe-color-inline-code: var(--foreground);
-  --crepe-color-inline-area: var(--surface-subtle);
+  --crepe-color-inline-code: var(--inline-code-foreground);
+  --crepe-color-inline-area: var(--inline-code-background);
   --crepe-color-hover: var(--surface-subtle);
   --crepe-color-selected: var(--primary-soft);
   --crepe-font-default: inherit;
@@ -184,6 +184,15 @@ select {
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
 }
 
+.openmd-editor .ProseMirror :not(pre) > code {
+  padding: 0.12em 0.38em;
+  border: 1px solid var(--inline-code-border);
+  border-radius: 5px;
+  background: var(--inline-code-background);
+  color: var(--inline-code-foreground);
+  line-height: 1.45;
+}
+
 .openmd-editor .ProseMirror p {
   line-height: 1.7;
 }
@@ -210,6 +219,136 @@ select {
   color: inherit;
   font-size: inherit;
   line-height: inherit;
+}
+
+.openmd-editor .milkdown-code-block {
+  --crepe-color-surface: #24272c;
+  --crepe-color-surface-low: #2d3138;
+  --crepe-color-on-surface: #edf0f5;
+  --crepe-color-on-surface-variant: #c7cdd7;
+  --crepe-color-outline: #8b95a5;
+  --crepe-color-hover: #3a4049;
+  --crepe-color-selected: #334c72;
+  --crepe-color-secondary: #30353d;
+
+  margin: 14px 0;
+  padding: 8px 16px 16px;
+  border: 1px solid #363b43;
+  border-radius: 10px;
+  background: #24272c;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
+  color: #edf0f5;
+}
+
+.openmd-editor .milkdown-code-block .cm-editor,
+.openmd-editor .milkdown-code-block .cm-gutters,
+.openmd-editor .milkdown-code-block .milkdown-code-block-placeholder {
+  background: #24272c;
+}
+
+.openmd-editor .milkdown-code-block .cm-scroller,
+.openmd-editor .milkdown-code-block .cm-content,
+.openmd-editor .milkdown-code-block .milkdown-code-block-placeholder {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.openmd-editor .milkdown-code-block .cm-content {
+  min-height: 48px;
+  padding-block: 6px;
+  caret-color: #ffffff;
+}
+
+.openmd-editor .milkdown-code-block .cm-focused .cm-selectionBackground,
+.openmd-editor .milkdown-code-block .cm-selectionBackground {
+  background: #34527d !important;
+}
+
+.openmd-editor .milkdown-code-block:focus-within,
+.openmd-editor .milkdown-code-block.selected {
+  border-color: color-mix(in srgb, var(--primary) 72%, #363b43);
+  outline: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
+}
+
+.openmd-editor .milkdown-code-block:focus-within .language-button,
+.openmd-editor .milkdown-code-block:focus-within .tools-button-group > button {
+  opacity: 1;
+}
+
+.openmd-editor .milkdown-code-block .language-list {
+  max-height: 320px;
+}
+
+.openmd-editor .milkdown-table-block {
+  position: relative;
+  margin: 18px 0;
+}
+
+.openmd-editor .milkdown-table-block .table-wrapper {
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+}
+
+.openmd-editor .milkdown-table-block table.children {
+  width: 100%;
+  min-width: 440px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+
+.openmd-editor .milkdown-table-block th,
+.openmd-editor .milkdown-table-block td {
+  min-width: 120px;
+  padding: 8px 12px;
+  border: 0;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+  vertical-align: top;
+}
+
+.openmd-editor .milkdown-table-block th {
+  background: var(--surface-subtle);
+  font-weight: 650;
+}
+
+.openmd-editor .milkdown-table-block tr:last-child td,
+.openmd-editor .milkdown-table-block tr:last-child th {
+  border-bottom: 0;
+}
+
+.openmd-editor .milkdown-table-block tr > :last-child {
+  border-right: 0;
+}
+
+.openmd-editor .milkdown-table-block th p,
+.openmd-editor .milkdown-table-block td p {
+  min-height: 1.6em;
+  margin: 0;
+}
+
+.openmd-editor .milkdown-table-block .cell-handle,
+.openmd-editor .milkdown-table-block .line-handle .add-button {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--foreground);
+}
+
+.openmd-editor .milkdown-table-block .cell-handle .button-group {
+  border: 1px solid var(--border);
+}
+
+.openmd-editor .milkdown-list-item-block .label-wrapper {
+  cursor: pointer;
+}
+
+.openmd-editor .milkdown-list-item-block .label.checked,
+.openmd-editor .milkdown-list-item-block .label.unchecked {
+  color: var(--primary);
 }
 
 .openmd-editor .ProseMirror hr {

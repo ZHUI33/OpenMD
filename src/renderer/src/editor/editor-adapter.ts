@@ -8,6 +8,7 @@ import {
   commitBlockSourceEditing,
   isBlockSourceEditing,
 } from './block-source-plugin'
+import { configureOpenMdCodeBlocks } from './code-block-config'
 import {
   commitHeadingSourceEditing,
   headingSourcePlugin,
@@ -18,6 +19,9 @@ import {
   inlineSourcePlugin,
   isInlineSourceEditing,
 } from './inline-source-plugin'
+import { openMdInsertMenuConfig } from './insert-menu-config'
+import { listEditingPlugin } from './list-editing-plugin'
+import { openMdTableFeatures, openMdTablePlugins } from './table-feature'
 
 export interface EditorAdapterOptions {
   root: HTMLElement
@@ -40,17 +44,21 @@ export class OpenMdEditorAdapter {
       root: options.root,
       defaultValue: options.initialMarkdown,
       features: {
-        [CrepeFeature.CodeMirror]: false,
+        ...openMdTableFeatures,
+        [CrepeFeature.CodeMirror]: true,
+        [CrepeFeature.ListItem]: true,
         [CrepeFeature.LinkTooltip]: false,
+        [CrepeFeature.BlockEdit]: true,
         [CrepeFeature.Toolbar]: false,
         [CrepeFeature.ImageBlock]: false,
-        [CrepeFeature.Table]: false,
         [CrepeFeature.Latex]: false,
       },
       featureConfigs: {
         [CrepeFeature.Placeholder]: { text: '开始写作…' },
+        [CrepeFeature.BlockEdit]: openMdInsertMenuConfig,
       },
     })
+    this.crepe.editor.config(configureOpenMdCodeBlocks)
     this.crepe.editor.config((ctx) => {
       ctx.update(remarkStringifyOptionsCtx, (options) => ({
         ...options,
@@ -65,6 +73,8 @@ export class OpenMdEditorAdapter {
     this.crepe.editor.use(headingSourcePlugin)
     this.crepe.editor.use(inlineSourcePlugin)
     this.crepe.editor.use(blockSourcePlugin)
+    this.crepe.editor.use(listEditingPlugin)
+    this.crepe.editor.use(openMdTablePlugins)
 
     this.crepe.setReadonly(options.readOnly).on((listener) => {
       listener.markdownUpdated((ctx, markdown) => {

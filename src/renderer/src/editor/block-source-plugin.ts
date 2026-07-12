@@ -41,13 +41,7 @@ interface EditableBlockMarker extends HTMLElement {
   openmdDeleteForward: () => void
 }
 
-const supportedBlockNames = new Set([
-  'blockquote',
-  'bullet_list',
-  'ordered_list',
-  'code_block',
-  'hr',
-])
+const supportedBlockNames = new Set(['blockquote', 'bullet_list', 'ordered_list', 'hr'])
 
 const blockSourceKey = new PluginKey<BlockSourceState>('openmd-block-source')
 const markerSentinel = 'OPENMDBLOCKBOUNDARY'
@@ -96,6 +90,15 @@ function selectionIsInsideNode(
   node: ProseMirrorNode,
 ): boolean {
   return state.selection.from >= position + 1 && state.selection.to <= position + node.nodeSize - 1
+}
+
+function selectionIsInsideTaskItem(state: EditorState): boolean {
+  const { $from } = state.selection
+  for (let depth = $from.depth; depth > 0; depth -= 1) {
+    const node = $from.node(depth)
+    if (node.type.name === 'list_item') return typeof node.attrs.checked === 'boolean'
+  }
+  return false
 }
 
 function sourcePrefixAtTextblock(
@@ -494,6 +497,9 @@ function createDecorations(
 
   const block = topLevelBlockAtSelection(state)
   if (!block || !supportedBlockNames.has(block.node.type.name)) return DecorationSet.empty
+  // Keep Crepe's clickable checkbox visible while editing a task item. Task
+  // state is still serialized as standard `- [ ]` / `- [x]` Markdown.
+  if (selectionIsInsideTaskItem(state)) return DecorationSet.empty
 
   let markers: SourceMarker[] = []
   if (block.node.type.name === 'code_block') {
