@@ -11,6 +11,7 @@ describe('CodeMirror code-block configuration', () => {
   })
 
   it.each([
+    ['mermaid', 'mermaid'],
     ['javascript', 'js'],
     ['typescript', 'ts'],
     ['bash', 'sh'],

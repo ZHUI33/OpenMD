@@ -8,6 +8,7 @@ export const OPEN_MD_INSERT_COMMANDS = [
   'task-list',
   'table',
   'code-block',
+  'math',
   'divider',
 ] as const
 
@@ -42,6 +43,6 @@ export const openMdInsertMenuConfig: BlockEditFeatureConfig = {
     image: null,
     codeBlock: { label: '代码块' },
     table: { label: '表格' },
-    math: null,
+    math: { label: '公式' },
   },
 }

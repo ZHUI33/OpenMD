@@ -22,7 +22,11 @@ import {
 import { openMdInsertMenuConfig } from './insert-menu-config'
 import { createOpenMdImageFeature, type RendererImagesApi } from './image-feature'
 import { listEditingPlugin } from './list-editing-plugin'
+import { createOpenMdMathFeature, openMdMathFeatures } from './math-feature'
+import { createOpenMdMermaidFeature } from './mermaid-feature'
+import type { OutlineItem } from './outline-feature'
 import { openMdTableFeatures, openMdTablePlugins } from './table-feature'
+import { createDocumentOutlineFeature } from './toc-feature'
 
 export interface EditorAdapterOptions {
   root: HTMLElement
@@ -32,6 +36,8 @@ export interface EditorAdapterOptions {
   imagesApi?: RendererImagesApi
   getDocumentPath?: () => string | undefined
   onEnsureDocumentSaved?: () => Promise<string | undefined>
+  onOutlineChange?: (outline: readonly OutlineItem[]) => void
+  onActiveHeadingChange?: (id: string | null) => void
 }
 
 const unavailableImagesApi: RendererImagesApi = {
@@ -49,6 +55,10 @@ const unavailableImagesApi: RendererImagesApi = {
 export class OpenMdEditorAdapter {
   private readonly crepe: Crepe
   private readonly imageFeature: ReturnType<typeof createOpenMdImageFeature>
+  private readonly mathFeature = createOpenMdMathFeature()
+  private readonly mermaidFeature = createOpenMdMermaidFeature()
+  private readonly outlineFeature = createDocumentOutlineFeature({ viewportOffset: 72 })
+  private readonly unsubscribeOutline: Array<() => void>
   private markdown: string
   private markdownDocument: ProseMirrorNode | null = null
   private programmaticDocument: ProseMirrorNode | null = null
@@ -57,6 +67,16 @@ export class OpenMdEditorAdapter {
 
   constructor(options: EditorAdapterOptions) {
     this.markdown = options.initialMarkdown
+    this.unsubscribeOutline = [
+      this.outlineFeature.controller.subscribe(
+        (outline) => options.onOutlineChange?.(outline),
+        true,
+      ),
+      this.outlineFeature.controller.subscribeActive(
+        (id) => options.onActiveHeadingChange?.(id),
+        true,
+      ),
+    ]
     this.imageFeature = createOpenMdImageFeature({
       imagesApi: options.imagesApi ?? unavailableImagesApi,
       getDocumentPath: options.getDocumentPath ?? (() => undefined),
@@ -67,13 +87,13 @@ export class OpenMdEditorAdapter {
       defaultValue: options.initialMarkdown,
       features: {
         ...openMdTableFeatures,
+        ...openMdMathFeatures,
         [CrepeFeature.CodeMirror]: true,
         [CrepeFeature.ListItem]: true,
         [CrepeFeature.LinkTooltip]: false,
         [CrepeFeature.BlockEdit]: true,
         [CrepeFeature.Toolbar]: false,
         [CrepeFeature.ImageBlock]: false,
-        [CrepeFeature.Latex]: false,
       },
       featureConfigs: {
         [CrepeFeature.Placeholder]: { text: '开始写作…' },
@@ -81,6 +101,9 @@ export class OpenMdEditorAdapter {
       },
     })
     this.crepe.editor.config(configureOpenMdCodeBlocks)
+    this.crepe.editor.config(this.mathFeature.configure)
+    this.crepe.editor.config(this.mermaidFeature.configureCodeBlocks)
+    this.crepe.editor.config(this.outlineFeature.configure)
     this.crepe.editor.config(this.imageFeature.configureUpload)
     this.crepe.editor.config((ctx) => {
       ctx.update(remarkStringifyOptionsCtx, (options) => ({
@@ -99,6 +122,9 @@ export class OpenMdEditorAdapter {
     this.crepe.editor.use(listEditingPlugin)
     this.crepe.editor.use(openMdTablePlugins)
     this.crepe.editor.use(this.imageFeature.plugins)
+    this.crepe.editor.use(this.mathFeature.plugins)
+    this.crepe.editor.use(this.mermaidFeature.plugins)
+    this.crepe.editor.use(this.outlineFeature.plugins)
 
     this.crepe.setReadonly(options.readOnly).on((listener) => {
       listener.markdownUpdated((ctx, markdown) => {
@@ -196,6 +222,11 @@ export class OpenMdEditorAdapter {
     this.crepe.editor.action((ctx) => ctx.get(editorViewCtx).focus())
   }
 
+  scrollToHeading(id: string): boolean {
+    if (this.destroyed || !this.created) return false
+    return this.outlineFeature.controller.scrollToHeading(id)
+  }
+
   async insertImageFromPicker(): Promise<void> {
     if (this.destroyed || !this.created) return
     await this.imageFeature.insertFromPicker()
@@ -207,6 +238,7 @@ export class OpenMdEditorAdapter {
 
   async destroy(): Promise<void> {
     this.destroyed = true
+    this.unsubscribeOutline.splice(0).forEach((unsubscribe) => unsubscribe())
     if (this.created) await this.destroyEditor()
   }
 

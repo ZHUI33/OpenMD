@@ -1,8 +1,10 @@
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { JSX } from 'react'
 
+import { OutlinePanel } from '../components/OutlinePanel'
 import { OpenMdEditorAdapter } from './editor-adapter'
 import type { OpenMdEditorHandle, OpenMdEditorProps } from './editor.types'
+import type { OutlineItem } from './outline-feature'
 
 const CHANGE_DEBOUNCE_MS = 180
 
@@ -26,6 +28,9 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
   const documentPathRef = useRef(documentPath)
   const ensureDocumentSavedRef = useRef(onEnsureDocumentSaved)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [outline, setOutline] = useState<readonly OutlineItem[]>([])
+  const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null)
+  const [outlineVisible, setOutlineVisible] = useState(true)
 
   onChangeRef.current = onChange
   imagesApiRef.current = imagesApi
@@ -70,6 +75,8 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
       imagesApi: imagesApiRef.current,
       getDocumentPath: () => documentPathRef.current,
       onEnsureDocumentSaved: async () => ensureDocumentSavedRef.current?.(),
+      onOutlineChange: (nextOutline) => setOutline([...nextOutline]),
+      onActiveHeadingChange: setActiveHeadingId,
       onChange: (markdown) => {
         if (timerRef.current) clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => {
@@ -96,5 +103,18 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
     adapterRef.current?.setDocumentPath(documentPath)
   }, [documentPath])
 
-  return <div ref={rootRef} className="openmd-editor" aria-label="Markdown 正文编辑器" />
+  return (
+    <div className="openmd-editor-layout" data-outline-visible={outlineVisible}>
+      <OutlinePanel
+        activeId={activeHeadingId}
+        items={outline}
+        visible={outlineVisible}
+        onNavigate={(id) => adapterRef.current?.scrollToHeading(id)}
+        onVisibleChange={setOutlineVisible}
+      />
+      <div className="openmd-editor-scroll">
+        <div ref={rootRef} className="openmd-editor" aria-label="Markdown 正文编辑器" />
+      </div>
+    </div>
+  )
 })

@@ -5,7 +5,7 @@ import {
   openMdInsertMenuConfig,
 } from '../src/renderer/src/editor/insert-menu-config'
 
-describe('phase 4 insert menu', () => {
+describe('OpenMD insert menu', () => {
   it('contains every required insertion command', () => {
     expect(OPEN_MD_INSERT_COMMANDS).toEqual([
       'heading',
@@ -15,12 +15,13 @@ describe('phase 4 insert menu', () => {
       'task-list',
       'table',
       'code-block',
+      'math',
       'divider',
     ])
   })
 
-  it('keeps out-of-scope image and math commands hidden', () => {
+  it('keeps the image command hidden and exposes the phase 6 math command', () => {
     expect(openMdInsertMenuConfig.advancedGroup?.image).toBeNull()
-    expect(openMdInsertMenuConfig.advancedGroup?.math).toBeNull()
+    expect(openMdInsertMenuConfig.advancedGroup?.math).toEqual({ label: '公式' })
   })
 })

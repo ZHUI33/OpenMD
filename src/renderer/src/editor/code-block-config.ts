@@ -10,6 +10,7 @@ import type { Ctx } from '@milkdown/kit/ctx'
 
 export const OPENMD_CODE_LANGUAGE_IDS = [
   'plaintext',
+  'mermaid',
   'javascript',
   'typescript',
   'java',
@@ -26,6 +27,7 @@ export type OpenMdCodeLanguage = (typeof OPENMD_CODE_LANGUAGE_IDS)[number]
 
 export const OPENMD_CODE_LANGUAGE_LABELS: Readonly<Record<OpenMdCodeLanguage, string>> = {
   plaintext: 'Plain Text',
+  mermaid: 'Mermaid',
   javascript: 'JavaScript',
   typescript: 'TypeScript',
   java: 'Java',
@@ -38,7 +40,9 @@ export const OPENMD_CODE_LANGUAGE_LABELS: Readonly<Record<OpenMdCodeLanguage, st
   markdown: 'Markdown',
 }
 
-const SOURCE_LANGUAGE_NAMES: Readonly<Record<Exclude<OpenMdCodeLanguage, 'plaintext'>, string>> = {
+const SOURCE_LANGUAGE_NAMES: Readonly<
+  Record<Exclude<OpenMdCodeLanguage, 'plaintext' | 'mermaid'>, string>
+> = {
   javascript: 'javascript',
   typescript: 'typescript',
   java: 'java',
@@ -67,13 +71,25 @@ const plaintextLanguage = LanguageDescription.of({
   support: new LanguageSupport(StreamLanguage.define(plaintextParser)),
 })
 
+// Mermaid has no bundled CodeMirror grammar. It still needs a canonical
+// language entry so users can select the standard fenced info string while
+// editing the diagram source.
+const mermaidLanguage = LanguageDescription.of({
+  name: 'mermaid',
+  alias: ['mermaid'],
+  extensions: ['mmd', 'mermaid'],
+  support: new LanguageSupport(StreamLanguage.define(plaintextParser)),
+})
+
 function sourceLanguage(name: string): LanguageDescription {
   const source = LanguageDescription.matchLanguageName(codeMirrorLanguages, name)
   if (!source) throw new Error(`CodeMirror language is unavailable: ${name}`)
   return source
 }
 
-function canonicalLanguage(id: Exclude<OpenMdCodeLanguage, 'plaintext'>): LanguageDescription {
+function canonicalLanguage(
+  id: Exclude<OpenMdCodeLanguage, 'plaintext' | 'mermaid'>,
+): LanguageDescription {
   const source = sourceLanguage(SOURCE_LANGUAGE_NAMES[id])
   return LanguageDescription.of({
     name: id,
@@ -91,8 +107,10 @@ function canonicalLanguage(id: Exclude<OpenMdCodeLanguage, 'plaintext'>): Langua
  */
 export const openMdCodeLanguages: readonly LanguageDescription[] = [
   plaintextLanguage,
+  mermaidLanguage,
   ...OPENMD_CODE_LANGUAGE_IDS.filter(
-    (id): id is Exclude<OpenMdCodeLanguage, 'plaintext'> => id !== 'plaintext',
+    (id): id is Exclude<OpenMdCodeLanguage, 'plaintext' | 'mermaid'> =>
+      id !== 'plaintext' && id !== 'mermaid',
   ).map(canonicalLanguage),
 ]
 
