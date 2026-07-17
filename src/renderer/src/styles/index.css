@@ -127,6 +127,14 @@ select {
   background: var(--primary-soft);
 }
 
+.insert-image-button:disabled {
+  border-color: var(--border);
+  background: var(--surface-subtle);
+  color: var(--muted);
+  cursor: not-allowed;
+  opacity: 0.65;
+}
+
 .workspace {
   min-height: 0;
   overflow: hidden;
@@ -145,11 +153,35 @@ select {
   grid-template-columns: 0 minmax(0, 1fr);
 }
 
+.openmd-editor-layout[data-mode='source'] {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.openmd-editor-layout[data-switching='true'] > :last-child {
+  visibility: hidden;
+}
+
 .openmd-editor-scroll {
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
   padding: 0 clamp(24px, 7vw, 96px);
+}
+
+.openmd-source-editor-scroll,
+.openmd-source-editor {
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+.openmd-source-editor-scroll {
+  overflow: hidden;
+}
+
+.openmd-source-editor .cm-editor {
+  height: 100%;
 }
 
 .openmd-outline-panel {
@@ -1048,6 +1080,15 @@ select {
   color: var(--muted);
   font-size: 11px;
   user-select: none;
+}
+
+.status-bar > :first-child,
+.status-bar > :last-child {
+  flex: 1 1 0;
+}
+
+.status-bar > :last-child {
+  text-align: right;
 }
 
 @media (max-width: 900px) {

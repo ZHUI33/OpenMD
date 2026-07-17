@@ -22,6 +22,10 @@ function setDocument(markdown: string, filePath: string, dirtyMarkdown?: string)
   useAppStore.setState({
     theme: 'system',
     sidebarVisible: false,
+    editorMode: 'visual',
+    sourceLineNumbers: true,
+    sourceLineWrapping: true,
+    sourceCursor: { line: 1, column: 1 },
     document: {
       markdown: dirtyMarkdown ?? markdown,
       savedMarkdown: markdown,
@@ -50,6 +54,12 @@ describe('document controller', () => {
       setReadOnly: vi.fn(),
       focus: vi.fn(),
       insertImageFromPicker: vi.fn(async () => undefined),
+      getMode: vi.fn(() => 'visual' as const),
+      setMode: vi.fn(async () => undefined),
+      toggleMode: vi.fn(async () => undefined),
+      toggleSourceLineNumbers: vi.fn(),
+      toggleSourceLineWrapping: vi.fn(),
+      whenIdle: vi.fn(async () => undefined),
     }
     controller = new DocumentController(api, () => editor)
     setDocument('saved content', 'C:\\notes\\draft.md', editorMarkdown)
@@ -85,6 +95,44 @@ describe('document controller', () => {
       intent: 'window',
       requestId: 'close-1',
       proceed: false,
+    })
+  })
+
+  it('opens a document into the current source mode without changing modes', async () => {
+    vi.mocked(editor.getMode).mockReturnValue('source')
+    vi.mocked(api.openDocument).mockResolvedValue({
+      canceled: false,
+      filePath: 'C:\\notes\\opened.md',
+      content: '# 已打开\n\n源码内容',
+    })
+
+    await controller.handleCommand({ type: 'open' })
+
+    expect(editor.setMarkdown).toHaveBeenCalledWith('# 已打开\n\n源码内容')
+    expect(editor.toggleMode).not.toHaveBeenCalled()
+    expect(editor.getMode()).toBe('source')
+    expect(useAppStore.getState().document).toMatchObject({
+      markdown: '# 已打开\n\n源码内容',
+      savedMarkdown: '# 已打开\n\n源码内容',
+      filePath: 'C:\\notes\\opened.md',
+      dirty: false,
+    })
+  })
+
+  it('creates a clean empty document while remaining in source mode', async () => {
+    vi.mocked(editor.getMode).mockReturnValue('source')
+    vi.mocked(api.newDocument).mockResolvedValue({ content: '' })
+
+    await controller.handleCommand({ type: 'new' })
+
+    expect(editor.setMarkdown).toHaveBeenCalledWith('')
+    expect(editor.toggleMode).not.toHaveBeenCalled()
+    expect(editor.getMode()).toBe('source')
+    expect(useAppStore.getState().document).toMatchObject({
+      markdown: '',
+      savedMarkdown: '',
+      filePath: undefined,
+      dirty: false,
     })
   })
 
@@ -166,5 +214,35 @@ describe('document controller', () => {
       Promise.all([controller.ensureDocumentSaved(), controller.ensureDocumentSaved()]),
     ).resolves.toEqual(['C:\\notes\\saved.md', 'C:\\notes\\saved.md'])
     expect(api.saveDocument).toHaveBeenCalledOnce()
+  })
+
+  it('serializes a mode switch before saving the latest source snapshot', async () => {
+    let finishSwitch: (() => void) | undefined
+    vi.mocked(editor.toggleMode).mockReturnValue(
+      new Promise((resolve) => {
+        finishSwitch = resolve
+      }),
+    )
+    vi.mocked(editor.getMode).mockReturnValue('source')
+    vi.mocked(api.saveDocument).mockResolvedValue({
+      canceled: false,
+      filePath: 'C:\\notes\\draft.md',
+    })
+
+    const switching = controller.handleCommand({ type: 'toggle-editor-mode' })
+    editorMarkdown = '# 源码最新内容\n\n中文与 ![图片](a.png)'
+    const saving = controller.handleCommand({ type: 'save' })
+    await Promise.resolve()
+
+    expect(api.saveDocument).not.toHaveBeenCalled()
+    finishSwitch?.()
+    await switching
+    await saving
+
+    expect(api.saveDocument).toHaveBeenCalledWith({
+      filePath: 'C:\\notes\\draft.md',
+      content: '# 源码最新内容\n\n中文与 ![图片](a.png)',
+      saveAs: false,
+    })
   })
 })

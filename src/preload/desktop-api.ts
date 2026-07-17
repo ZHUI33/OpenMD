@@ -4,7 +4,7 @@ import type {
   AppInfo,
   ConfirmCloseRequest,
   ConfirmCloseResult,
-  DocumentCommand,
+  RendererCommand,
   ResolveImageRequest,
   ResolveImageResult,
   NewDocumentResult,
@@ -37,8 +37,8 @@ export const openMdApi: OpenMdApi = Object.freeze({
     reload: () => ipcRenderer.invoke(IPC_CHANNELS.documentsReload) as Promise<void>,
     resolveClose: (request: ResolveCloseRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.documentsResolveClose, request) as Promise<void>,
-    onCommand: (listener: (command: DocumentCommand) => void) => {
-      const ipcListener = (_event: Electron.IpcRendererEvent, command: DocumentCommand): void => {
+    onCommand: (listener: (command: RendererCommand) => void) => {
+      const ipcListener = (_event: Electron.IpcRendererEvent, command: RendererCommand): void => {
         listener(command)
       }
 

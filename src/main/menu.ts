@@ -1,9 +1,9 @@
 import { app, Menu } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
 
-import type { DocumentCommand, RecentFile } from '../shared/desktop-api.types'
+import type { RecentFile, RendererCommand } from '../shared/desktop-api.types'
 
-export type SendDocumentCommand = (command: DocumentCommand) => void
+export type SendDocumentCommand = (command: RendererCommand) => void
 
 function createRecentFilesSubmenu(
   recentFiles: readonly RecentFile[],
@@ -100,6 +100,20 @@ export function installApplicationMenu(
     {
       label: '视图',
       submenu: [
+        {
+          label: '切换编辑模式',
+          accelerator: 'CmdOrCtrl+/',
+          click: () => sendCommand({ type: 'toggle-editor-mode' }),
+        },
+        {
+          label: '切换源码行号',
+          click: () => sendCommand({ type: 'toggle-source-line-numbers' }),
+        },
+        {
+          label: '切换长行自动换行',
+          click: () => sendCommand({ type: 'toggle-source-line-wrapping' }),
+        },
+        { type: 'separator' },
         {
           label: '重新加载',
           accelerator: 'CmdOrCtrl+R',

@@ -118,6 +118,13 @@ export type DocumentCommand =
   | { type: 'reload' }
   | { type: 'close'; intent: CloseIntent; requestId: string }
 
+export type EditorCommand =
+  | { type: 'toggle-editor-mode' }
+  | { type: 'toggle-source-line-numbers' }
+  | { type: 'toggle-source-line-wrapping' }
+
+export type RendererCommand = DocumentCommand | EditorCommand
+
 export interface DocumentsApi {
   ready: () => Promise<void>
   newDocument: () => Promise<NewDocumentResult>
@@ -126,7 +133,7 @@ export interface DocumentsApi {
   confirmClose: (request: ConfirmCloseRequest) => Promise<ConfirmCloseResult>
   reload: () => Promise<void>
   resolveClose: (request: ResolveCloseRequest) => Promise<void>
-  onCommand: (listener: (command: DocumentCommand) => void) => () => void
+  onCommand: (listener: (command: RendererCommand) => void) => () => void
 }
 
 export interface OpenMdApi {

@@ -6,9 +6,13 @@ import type { Theme } from '../stores/app-store'
 
 export interface TitleBarProps {
   onInsertImage?: () => void
+  insertImageDisabled?: boolean
 }
 
-export function TitleBar({ onInsertImage }: TitleBarProps): JSX.Element {
+export function TitleBar({
+  onInsertImage,
+  insertImageDisabled = false,
+}: TitleBarProps): JSX.Element {
   const theme = useAppStore((state) => state.theme)
   const setTheme = useAppStore((state) => state.setTheme)
   const dirty = useAppStore((state) => state.document.dirty)
@@ -28,7 +32,13 @@ export function TitleBar({ onInsertImage }: TitleBarProps): JSX.Element {
       </div>
 
       <div className="title-actions">
-        <button className="insert-image-button" type="button" onClick={onInsertImage}>
+        <button
+          className="insert-image-button"
+          type="button"
+          disabled={insertImageDisabled}
+          title={insertImageDisabled ? '请切换到所见即所得模式后插入图片' : undefined}
+          onClick={onInsertImage}
+        >
           插入图片
         </button>
         <label className="theme-control">

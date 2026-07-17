@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 import type { Event } from 'electron'
 
-import type { CloseIntent, DocumentCommand, ResolveCloseRequest } from '../shared/desktop-api.types'
+import type { CloseIntent, RendererCommand, ResolveCloseRequest } from '../shared/desktop-api.types'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 
 let mainWindow: BrowserWindow | null = null
@@ -14,13 +14,13 @@ let pendingClose:
   | undefined
 let nextCloseRequestId = 0
 let rendererReady = false
-let queuedCommands: DocumentCommand[] = []
+let queuedCommands: RendererCommand[] = []
 
 export function getMainWindow(): BrowserWindow | null {
   return mainWindow && !mainWindow.isDestroyed() ? mainWindow : null
 }
 
-export function sendDocumentCommand(command: DocumentCommand): void {
+export function sendDocumentCommand(command: RendererCommand): void {
   const window = getMainWindow() ?? createMainWindow()
   if (window.webContents.isDestroyed()) return
   if (!rendererReady) {

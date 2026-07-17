@@ -1,6 +1,6 @@
 import type {
-  DocumentCommand,
   DocumentsApi,
+  RendererCommand,
   SaveDocumentResult,
 } from '../../shared/desktop-api.types'
 import type { OpenMdEditorHandle } from './editor/editor.types'
@@ -16,7 +16,7 @@ export class DocumentController {
     private readonly getEditor: GetEditor,
   ) {}
 
-  handleCommand(command: DocumentCommand): Promise<void> {
+  handleCommand(command: RendererCommand): Promise<void> {
     const operation = this.commandQueue.then(() => this.executeCommand(command))
     this.commandQueue = operation.catch((error: unknown) => {
       console.error('Document command failed:', error)
@@ -46,7 +46,7 @@ export class DocumentController {
     return operation
   }
 
-  private async executeCommand(command: DocumentCommand): Promise<void> {
+  private async executeCommand(command: RendererCommand): Promise<void> {
     switch (command.type) {
       case 'new':
         await this.newDocument()
@@ -69,6 +69,15 @@ export class DocumentController {
       case 'close':
         await this.close(command.intent, command.requestId)
         break
+      case 'toggle-editor-mode':
+        await this.getEditor()?.toggleMode()
+        break
+      case 'toggle-source-line-numbers':
+        this.getEditor()?.toggleSourceLineNumbers()
+        break
+      case 'toggle-source-line-wrapping':
+        this.getEditor()?.toggleSourceLineWrapping()
+        break
     }
   }
 
@@ -78,10 +87,12 @@ export class DocumentController {
     return markdown
   }
 
-  private replaceDocument(markdown: string, filePath?: string): void {
-    this.getEditor()?.setMarkdown(markdown)
+  private async replaceDocument(markdown: string, filePath?: string): Promise<void> {
+    const editor = this.getEditor()
+    editor?.setMarkdown(markdown)
     useAppStore.getState().setDocument(markdown, filePath)
-    this.getEditor()?.focus()
+    await editor?.whenIdle()
+    editor?.focus()
   }
 
   private applySaveResult(result: SaveDocumentResult, savedMarkdown: string): void {
@@ -138,7 +149,7 @@ export class DocumentController {
     if (!(await this.confirmDocumentReplacement())) return
 
     const result = await this.withEditorLocked(() => this.documentsApi.newDocument())
-    this.replaceDocument(result.content)
+    await this.replaceDocument(result.content)
   }
 
   private async openDocument(filePath?: string): Promise<void> {
@@ -156,7 +167,7 @@ export class DocumentController {
       return
     }
 
-    this.replaceDocument(result.content, result.filePath)
+    await this.replaceDocument(result.content, result.filePath)
   }
 
   private async reload(): Promise<void> {

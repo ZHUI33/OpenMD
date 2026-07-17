@@ -11,6 +11,10 @@ function resetStore(): void {
   useAppStore.setState({
     theme: 'system',
     sidebarVisible: false,
+    editorMode: 'visual',
+    sourceLineNumbers: true,
+    sourceLineWrapping: true,
+    sourceCursor: { line: 1, column: 1 },
     document: {
       markdown: WELCOME_MARKDOWN,
       savedMarkdown: WELCOME_MARKDOWN,
@@ -30,6 +34,10 @@ describe('app store', () => {
 
     expect(state.theme).toBe('system')
     expect(state.sidebarVisible).toBe(false)
+    expect(state.editorMode).toBe('visual')
+    expect(state.sourceLineNumbers).toBe(true)
+    expect(state.sourceLineWrapping).toBe(true)
+    expect(state.sourceCursor).toEqual({ line: 1, column: 1 })
     expect(state.document.markdown).toBe(WELCOME_MARKDOWN)
     expect(state.document.savedMarkdown).toBe(WELCOME_MARKDOWN)
     expect(state.document.filePath).toBeUndefined()
@@ -46,6 +54,21 @@ describe('app store', () => {
     useAppStore.getState().toggleSidebar()
 
     expect(useAppStore.getState().sidebarVisible).toBe(true)
+  })
+
+  it('updates editor mode, source preferences, and cursor independently of the document', () => {
+    useAppStore.getState().setEditorMode('source')
+    useAppStore.getState().setSourceLineNumbers(false)
+    useAppStore.getState().setSourceLineWrapping(false)
+    useAppStore.getState().setSourceCursor({ line: 8, column: 3 })
+
+    expect(useAppStore.getState()).toMatchObject({
+      editorMode: 'source',
+      sourceLineNumbers: false,
+      sourceLineWrapping: false,
+      sourceCursor: { line: 8, column: 3 },
+    })
+    expect(useAppStore.getState().document.dirty).toBe(false)
   })
 
   it('counts Chinese characters and English words', () => {

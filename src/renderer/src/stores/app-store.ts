@@ -1,12 +1,17 @@
 import { create } from 'zustand'
 
 import type { SaveDocumentResult } from '../../../shared/desktop-api.types'
+import type { EditorMode, SourceCursorPosition } from '../editor/editor.types'
 
 export type Theme = 'light' | 'dark' | 'system'
 
 export interface AppState {
   theme: Theme
   sidebarVisible: boolean
+  editorMode: EditorMode
+  sourceLineNumbers: boolean
+  sourceLineWrapping: boolean
+  sourceCursor: SourceCursorPosition
   document: DocumentState
 }
 
@@ -23,6 +28,10 @@ interface AppActions {
   setTheme: (theme: Theme) => void
   setSidebarVisible: (visible: boolean) => void
   toggleSidebar: () => void
+  setEditorMode: (mode: EditorMode) => void
+  setSourceLineNumbers: (visible: boolean) => void
+  setSourceLineWrapping: (enabled: boolean) => void
+  setSourceCursor: (position: SourceCursorPosition) => void
   updateMarkdown: (markdown: string) => void
   setDocument: (markdown: string, filePath?: string) => void
   applySaveResult: (result: SaveDocumentResult, savedMarkdown: string) => void
@@ -84,6 +93,10 @@ function createDocumentState(
 const initialState: AppState = {
   theme: 'system',
   sidebarVisible: false,
+  editorMode: 'visual',
+  sourceLineNumbers: true,
+  sourceLineWrapping: true,
+  sourceCursor: { line: 1, column: 1 },
   document: createDocumentState(WELCOME_MARKDOWN),
 }
 
@@ -97,6 +110,18 @@ export const useAppStore = create<AppStore>((set) => ({
   },
   toggleSidebar: () => {
     set((state) => ({ sidebarVisible: !state.sidebarVisible }))
+  },
+  setEditorMode: (editorMode) => {
+    set({ editorMode })
+  },
+  setSourceLineNumbers: (sourceLineNumbers) => {
+    set({ sourceLineNumbers })
+  },
+  setSourceLineWrapping: (sourceLineWrapping) => {
+    set({ sourceLineWrapping })
+  },
+  setSourceCursor: (sourceCursor) => {
+    set({ sourceCursor })
   },
   updateMarkdown: (markdown) => {
     set((state) =>
