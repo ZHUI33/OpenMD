@@ -12,6 +12,7 @@ function createDocumentsApi(): DocumentsApi {
     openDocument: vi.fn(() => Promise.resolve({ canceled: true })),
     saveDocument: vi.fn(() => Promise.resolve({ canceled: true })),
     confirmClose: vi.fn(() => Promise.resolve({ action: 'discard' as const })),
+    releaseDocument: vi.fn(() => Promise.resolve()),
     reload: vi.fn(() => Promise.resolve()),
     resolveClose: vi.fn(() => Promise.resolve()),
     onCommand: vi.fn(() => () => undefined),

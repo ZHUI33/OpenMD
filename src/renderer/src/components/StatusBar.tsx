@@ -1,15 +1,23 @@
 import type { JSX } from 'react'
 
-import { useAppStore } from '../stores/app-store'
+import { countCharacters, countWords, useAppStore } from '../stores/app-store'
+import { useEditorTabsStore } from '../stores/editor-tabs-store'
 
 export function StatusBar(): JSX.Element {
-  const { wordCount, characterCount, dirty } = useAppStore((state) => state.document)
-  const editorMode = useAppStore((state) => state.editorMode)
+  const activeTab = useEditorTabsStore((state) =>
+    state.tabs.find((tab) => tab.id === state.activeTabId),
+  )
   const sourceCursor = useAppStore((state) => state.sourceCursor)
+  const legacyDocument = useAppStore((state) => state.document)
+  const legacyEditorMode = useAppStore((state) => state.editorMode)
+  const markdown = activeTab?.markdown ?? legacyDocument.markdown
+  const wordCount = countWords(markdown)
+  const characterCount = countCharacters(markdown)
+  const editorMode = activeTab?.editorMode ?? legacyEditorMode
 
   return (
     <footer className="status-bar">
-      <span>{dirty ? '已修改' : '就绪'}</span>
+      <span>{(activeTab?.dirty ?? legacyDocument.dirty) ? '已修改' : '就绪'}</span>
       <span>{editorMode === 'visual' ? '所见即所得' : 'Markdown 源码'}</span>
       {editorMode === 'source' ? (
         <span>

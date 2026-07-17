@@ -1,3 +1,5 @@
+import { isAbsolute, relative, resolve, sep } from 'node:path'
+
 import { app, dialog } from 'electron'
 import type { BrowserWindow } from 'electron'
 
@@ -11,7 +13,9 @@ import type {
   SaveDocumentResult,
 } from '../shared/desktop-api.types'
 import { getFileNameFromPath } from '../shared/document-utils'
+import { IPC_CHANNELS } from '../shared/ipc-channels'
 import { readUtf8Document, withDefaultMarkdownExtension, writeUtf8Document } from './document-files'
+import type { FileWatchRecipient, OpenedFileWatcher } from './opened-file-watcher'
 import { areSameFilePaths } from './recent-files'
 import type { RecentFilesStore } from './recent-files'
 
@@ -26,21 +30,142 @@ function isSupportedDocumentPath(filePath: string): boolean {
   return [...SUPPORTED_EXTENSIONS].some((extension) => normalized.endsWith(extension))
 }
 
+export interface DocumentServiceOptions {
+  canOpenPath?: (parentWindow: BrowserWindow, filePath: string) => boolean | Promise<boolean>
+  getWorkspaceRelativePath?: (parentWindow: BrowserWindow, filePath: string) => string | undefined
+  watcher?: Pick<
+    OpenedFileWatcher,
+    'watchFile' | 'unwatchFile' | 'unwatchRecipient' | 'markSelfSave' | 'clearSelfSave'
+  >
+}
+
 export class DocumentService {
   private readonly currentPaths = new Map<number, string>()
+  private readonly authorizedPaths = new Map<number, string[]>()
+  private readonly attachedWindows = new Set<number>()
 
   constructor(
     private readonly recentFiles: RecentFilesStore,
     private readonly onRecentFilesChanged: (recentFiles: RecentFile[]) => void,
+    private readonly options: DocumentServiceOptions = {},
   ) {}
 
   newDocument(parentWindow: BrowserWindow): { content: string } {
-    this.currentPaths.delete(parentWindow.webContents.id)
+    this.attachWindowCleanup(parentWindow)
     return { content: '' }
   }
 
   getCurrentPath(parentWindow: BrowserWindow): string | undefined {
     return this.currentPaths.get(parentWindow.webContents.id)
+  }
+
+  getAuthorizedDocumentPath(
+    parentWindow: BrowserWindow,
+    requestedPath: string,
+  ): string | undefined {
+    return this.authorizedPaths
+      .get(parentWindow.webContents.id)
+      ?.find((authorizedPath) => areSameFilePaths(authorizedPath, requestedPath))
+  }
+
+  isPathAuthorized(parentWindow: BrowserWindow, requestedPath: string): boolean {
+    return this.getAuthorizedDocumentPath(parentWindow, requestedPath) !== undefined
+  }
+
+  releaseDocumentPath(parentWindow: BrowserWindow, requestedPath: string): void {
+    const windowId = parentWindow.webContents.id
+    const authorized = this.authorizedPaths.get(windowId)
+    if (!authorized) return
+    const authorizedPath = authorized.find((candidate) =>
+      areSameFilePaths(candidate, requestedPath),
+    )
+    if (!authorizedPath) return
+
+    const remaining = authorized.filter((candidate) => !areSameFilePaths(candidate, authorizedPath))
+    this.authorizedPaths.set(windowId, remaining)
+    this.options.watcher?.unwatchFile(windowId, authorizedPath)
+    const currentPath = this.currentPaths.get(windowId)
+    if (currentPath && areSameFilePaths(currentPath, authorizedPath)) {
+      const nextCurrentPath = remaining.at(-1)
+      if (nextCurrentPath) this.currentPaths.set(windowId, nextCurrentPath)
+      else this.currentPaths.delete(windowId)
+    }
+  }
+
+  authorizeDocumentPath(
+    parentWindow: BrowserWindow,
+    filePath: string,
+    relativePath?: string,
+  ): void {
+    this.attachWindowCleanup(parentWindow)
+    const windowId = parentWindow.webContents.id
+    const authorized = this.authorizedPaths.get(windowId) ?? []
+    if (!authorized.some((item) => areSameFilePaths(item, filePath))) {
+      authorized.push(filePath)
+      this.authorizedPaths.set(windowId, authorized)
+    }
+    this.currentPaths.set(windowId, filePath)
+    this.options.watcher?.watchFile(
+      this.createWatchRecipient(parentWindow),
+      filePath,
+      relativePath ?? this.options.getWorkspaceRelativePath?.(parentWindow, filePath),
+    )
+  }
+
+  handleWorkspaceEntryRenamed(
+    parentWindow: BrowserWindow,
+    previousPath: string,
+    nextPath: string,
+  ): void {
+    const windowId = parentWindow.webContents.id
+    const authorized = this.authorizedPaths.get(windowId)
+    if (!authorized) return
+    let changed = false
+    const nextAuthorized = authorized.map((authorizedPath) => {
+      const relation = relative(resolve(previousPath), resolve(authorizedPath))
+      const isAffected =
+        relation === '' ||
+        (!relation.startsWith(`..${sep}`) && relation !== '..' && !isAbsolute(relation))
+      if (!isAffected) return authorizedPath
+      changed = true
+      this.options.watcher?.unwatchFile(windowId, authorizedPath)
+      const mappedPath = relation ? resolve(nextPath, relation) : nextPath
+      this.options.watcher?.watchFile(
+        this.createWatchRecipient(parentWindow),
+        mappedPath,
+        this.options.getWorkspaceRelativePath?.(parentWindow, mappedPath),
+      )
+      return mappedPath
+    })
+    if (!changed) return
+    this.authorizedPaths.set(windowId, nextAuthorized)
+    const currentPath = this.currentPaths.get(windowId)
+    if (currentPath) {
+      const mappedCurrent = nextAuthorized.find(
+        (candidate, index) =>
+          areSameFilePaths(authorized[index], currentPath) && candidate !== authorized[index],
+      )
+      if (mappedCurrent) this.currentPaths.set(windowId, mappedCurrent)
+    }
+  }
+
+  handleWorkspaceEntryDeleted(parentWindow: BrowserWindow, deletedPath: string): void {
+    const windowId = parentWindow.webContents.id
+    const authorized = this.authorizedPaths.get(windowId)
+    if (!authorized) return
+    const remaining = authorized.filter((authorizedPath) => {
+      const relation = relative(resolve(deletedPath), resolve(authorizedPath))
+      const isAffected =
+        relation === '' ||
+        (!relation.startsWith(`..${sep}`) && relation !== '..' && !isAbsolute(relation))
+      if (isAffected) this.options.watcher?.unwatchFile(windowId, authorizedPath)
+      return !isAffected
+    })
+    this.authorizedPaths.set(windowId, remaining)
+    const currentPath = this.currentPaths.get(windowId)
+    if (currentPath && !remaining.some((item) => areSameFilePaths(item, currentPath))) {
+      this.currentPaths.delete(windowId)
+    }
   }
 
   async flushRecentFiles(): Promise<void> {
@@ -55,8 +180,11 @@ export class DocumentService {
 
     if (filePath) {
       const requestedFilePath = filePath
-      const currentPath = this.currentPaths.get(parentWindow.webContents.id)
-      if (!currentPath || !areSameFilePaths(currentPath, requestedFilePath)) {
+      let isAuthorized = this.isPathAuthorized(parentWindow, requestedFilePath)
+      if (!isAuthorized && this.options.canOpenPath) {
+        isAuthorized = await this.options.canOpenPath(parentWindow, requestedFilePath)
+      }
+      if (!isAuthorized) {
         let isRecentFile: boolean
         try {
           isRecentFile = await this.recentFiles.hasFile(requestedFilePath)
@@ -90,7 +218,7 @@ export class DocumentService {
 
     try {
       const content = await readUtf8Document(filePath)
-      this.currentPaths.set(parentWindow.webContents.id, filePath)
+      this.authorizeDocumentPath(parentWindow, filePath)
       void this.rememberFile(filePath)
       return { canceled: false, filePath, content }
     } catch (error) {
@@ -110,8 +238,8 @@ export class DocumentService {
     let filePath = request.saveAs ? undefined : request.filePath
 
     if (filePath) {
-      const currentPath = this.currentPaths.get(parentWindow.webContents.id)
-      if (!currentPath || !areSameFilePaths(currentPath, filePath)) {
+      const authorizedPath = this.getAuthorizedDocumentPath(parentWindow, filePath)
+      if (!authorizedPath) {
         this.logDetailedError(
           'save',
           filePath,
@@ -119,6 +247,7 @@ export class DocumentService {
         )
         return { canceled: false, error: true }
       }
+      filePath = authorizedPath
     }
 
     if (!filePath) {
@@ -136,13 +265,26 @@ export class DocumentService {
       await this.showUnsupportedFileError(parentWindow, '保存', filePath)
       return { canceled: false, error: true }
     }
+    if (
+      request.forbiddenFilePaths?.some((forbiddenPath) => areSameFilePaths(forbiddenPath, filePath))
+    ) {
+      await dialog.showMessageBox(parentWindow, {
+        type: 'warning',
+        title: '文件已在其他标签中打开',
+        message: `无法保存为“${getFileNameFromPath(filePath) ?? '该文件'}”。`,
+        detail: '同一路径只能打开一个标签。请选择其他文件名，或先关闭已有标签。',
+      })
+      return { canceled: false, error: true }
+    }
 
     try {
+      this.options.watcher?.markSelfSave(filePath, request.content)
       await writeUtf8Document(filePath, request.content)
-      this.currentPaths.set(parentWindow.webContents.id, filePath)
+      this.authorizeDocumentPath(parentWindow, filePath)
       void this.rememberFile(filePath)
       return { canceled: false, filePath }
     } catch (error) {
+      this.options.watcher?.clearSelfSave(filePath)
       this.logDetailedError('save', filePath, error)
       await this.showFileError(parentWindow, '保存', filePath)
       return { canceled: false, error: true }
@@ -171,6 +313,7 @@ export class DocumentService {
     const saveResult = await this.saveDocument(parentWindow, {
       filePath: request.filePath,
       content: request.content,
+      forbiddenFilePaths: request.forbiddenFilePaths,
     })
     if (saveResult.canceled || saveResult.error || !saveResult.filePath) {
       return { action: 'cancel' }
@@ -214,6 +357,29 @@ export class DocumentService {
       this.onRecentFilesChanged(recentFiles)
     } catch (error) {
       this.logDetailedError('recent', filePath, error)
+    }
+  }
+
+  private attachWindowCleanup(parentWindow: BrowserWindow): void {
+    const windowId = parentWindow.webContents.id
+    if (this.attachedWindows.has(windowId)) return
+    this.attachedWindows.add(windowId)
+    parentWindow.once('closed', () => {
+      this.currentPaths.delete(windowId)
+      this.authorizedPaths.delete(windowId)
+      this.attachedWindows.delete(windowId)
+      this.options.watcher?.unwatchRecipient(windowId)
+    })
+  }
+
+  private createWatchRecipient(parentWindow: BrowserWindow): FileWatchRecipient {
+    return {
+      id: parentWindow.webContents.id,
+      emit: (change) => {
+        if (!parentWindow.isDestroyed() && !parentWindow.webContents.isDestroyed()) {
+          parentWindow.webContents.send(IPC_CHANNELS.workspaceFileChanged, change)
+        }
+      },
     }
   }
 

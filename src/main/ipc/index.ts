@@ -13,10 +13,17 @@ import type {
   SaveDocumentRequest,
   SaveImageRequest,
   SelectImageRequest,
+  CreateWorkspaceEntryRequest,
+  ListWorkspaceDirectoryRequest,
+  RenameWorkspaceEntryRequest,
+  ReleaseDocumentRequest,
+  WorkspacePathRequest,
+  WorkspaceSearchRequest,
 } from '../../shared/desktop-api.types'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { DocumentService } from '../document-service'
 import type { ImageService } from '../image-service'
+import type { WorkspaceService } from '../workspace-service'
 import { markRendererReady, reloadMainWindow, resolveCloseRequest } from '../window'
 
 function isTrustedRendererUrl(frameUrl: string): boolean {
@@ -35,7 +42,7 @@ function isTrustedRendererUrl(frameUrl: string): boolean {
   }
 }
 
-function getTrustedSenderWindow(event: IpcMainInvokeEvent): BrowserWindow {
+export function getTrustedSenderWindow(event: IpcMainInvokeEvent): BrowserWindow {
   const senderWindow = BrowserWindow.fromWebContents(event.sender)
 
   if (
@@ -60,6 +67,24 @@ function parseOpenRequest(value: unknown): OpenDocumentRequest {
   return { filePath: value.filePath as string | undefined }
 }
 
+function parseForbiddenFilePaths(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined
+  if (
+    !Array.isArray(value) ||
+    value.length > 1_000 ||
+    value.some(
+      (filePath) =>
+        typeof filePath !== 'string' ||
+        filePath.length === 0 ||
+        filePath.length > 32_768 ||
+        filePath.includes('\0'),
+    )
+  ) {
+    throw new TypeError('Invalid forbidden document paths.')
+  }
+  return [...value]
+}
+
 function parseSaveRequest(value: unknown): SaveDocumentRequest {
   if (
     !isRecord(value) ||
@@ -73,6 +98,7 @@ function parseSaveRequest(value: unknown): SaveDocumentRequest {
     content: value.content,
     filePath: value.filePath as string | undefined,
     saveAs: value.saveAs as boolean | undefined,
+    forbiddenFilePaths: parseForbiddenFilePaths(value.forbiddenFilePaths),
   }
 }
 
@@ -84,7 +110,24 @@ function parseConfirmCloseRequest(value: unknown): ConfirmCloseRequest {
   ) {
     throw new TypeError('Invalid confirm close request.')
   }
-  return { content: value.content, filePath: value.filePath as string | undefined }
+  return {
+    content: value.content,
+    filePath: value.filePath as string | undefined,
+    forbiddenFilePaths: parseForbiddenFilePaths(value.forbiddenFilePaths),
+  }
+}
+
+function parseReleaseDocumentRequest(value: unknown): ReleaseDocumentRequest {
+  if (
+    !isRecord(value) ||
+    typeof value.filePath !== 'string' ||
+    !value.filePath ||
+    value.filePath.length > 32_768 ||
+    value.filePath.includes('\0')
+  ) {
+    throw new TypeError('Invalid release document request.')
+  }
+  return { filePath: value.filePath }
 }
 
 function parseResolveCloseRequest(value: unknown): ResolveCloseRequest {
@@ -133,9 +176,81 @@ function parseResolveImageRequest(value: unknown): ResolveImageRequest {
   return { documentPath: value.documentPath, source: value.source }
 }
 
+function parseRelativePath(value: unknown, fieldName = 'relativePath'): string {
+  if (typeof value !== 'string' || value.length > 32_768 || value.includes('\0')) {
+    throw new TypeError(`Invalid workspace ${fieldName}.`)
+  }
+  return value
+}
+
+function parseWorkspacePathRequest(value: unknown): WorkspacePathRequest {
+  if (!isRecord(value)) throw new TypeError('Invalid workspace path request.')
+  return { relativePath: parseRelativePath(value.relativePath) }
+}
+
+function parseListWorkspaceDirectoryRequest(value: unknown): ListWorkspaceDirectoryRequest {
+  if (
+    !isRecord(value) ||
+    (value.includeTextFiles !== undefined && typeof value.includeTextFiles !== 'boolean')
+  ) {
+    throw new TypeError('Invalid list workspace directory request.')
+  }
+  return {
+    relativePath:
+      value.relativePath === undefined ? undefined : parseRelativePath(value.relativePath),
+    includeTextFiles: value.includeTextFiles as boolean | undefined,
+  }
+}
+
+function parseCreateWorkspaceEntryRequest(value: unknown): CreateWorkspaceEntryRequest {
+  if (!isRecord(value) || typeof value.name !== 'string' || value.name.length > 255) {
+    throw new TypeError('Invalid create workspace entry request.')
+  }
+  return {
+    parentRelativePath:
+      value.parentRelativePath === undefined
+        ? undefined
+        : parseRelativePath(value.parentRelativePath, 'parentRelativePath'),
+    name: value.name,
+  }
+}
+
+function parseRenameWorkspaceEntryRequest(value: unknown): RenameWorkspaceEntryRequest {
+  if (!isRecord(value) || typeof value.newName !== 'string' || value.newName.length > 255) {
+    throw new TypeError('Invalid rename workspace entry request.')
+  }
+  return {
+    relativePath: parseRelativePath(value.relativePath),
+    newName: value.newName,
+  }
+}
+
+function parseWorkspaceSearchRequest(value: unknown): WorkspaceSearchRequest {
+  if (
+    !isRecord(value) ||
+    typeof value.query !== 'string' ||
+    value.query.length > 1_000 ||
+    (value.caseSensitive !== undefined && typeof value.caseSensitive !== 'boolean') ||
+    (value.includeTextFiles !== undefined && typeof value.includeTextFiles !== 'boolean') ||
+    (value.maxResults !== undefined &&
+      (typeof value.maxResults !== 'number' ||
+        !Number.isInteger(value.maxResults) ||
+        value.maxResults <= 0))
+  ) {
+    throw new TypeError('Invalid workspace search request.')
+  }
+  return {
+    query: value.query,
+    caseSensitive: value.caseSensitive as boolean | undefined,
+    includeTextFiles: value.includeTextFiles as boolean | undefined,
+    maxResults: value.maxResults as number | undefined,
+  }
+}
+
 export function registerIpcHandlers(
   documentService: DocumentService,
   imageService: ImageService,
+  workspaceService: WorkspaceService,
 ): void {
   ipcMain.removeHandler(IPC_CHANNELS.appGetInfo)
   ipcMain.handle(IPC_CHANNELS.appGetInfo, (event): AppInfo => {
@@ -176,6 +291,13 @@ export function registerIpcHandlers(
     return documentService.confirmClose(senderWindow, parseConfirmCloseRequest(value))
   })
 
+  ipcMain.removeHandler(IPC_CHANNELS.documentsRelease)
+  ipcMain.handle(IPC_CHANNELS.documentsRelease, (event, value: unknown) => {
+    const senderWindow = getTrustedSenderWindow(event)
+    const request = parseReleaseDocumentRequest(value)
+    documentService.releaseDocumentPath(senderWindow, request.filePath)
+  })
+
   ipcMain.removeHandler(IPC_CHANNELS.documentsResolveClose)
   ipcMain.handle(IPC_CHANNELS.documentsResolveClose, async (event, value: unknown) => {
     const senderWindow = getTrustedSenderWindow(event)
@@ -206,5 +328,94 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.imagesResolve, (event, value: unknown) => {
     const senderWindow = getTrustedSenderWindow(event)
     return imageService.resolveImage(senderWindow, parseResolveImageRequest(value))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceOpen)
+  ipcMain.handle(IPC_CHANNELS.workspaceOpen, (event) => {
+    return workspaceService.open(getTrustedSenderWindow(event))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceGetCurrent)
+  ipcMain.handle(IPC_CHANNELS.workspaceGetCurrent, (event) => {
+    return workspaceService.getCurrent(getTrustedSenderWindow(event))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceListDirectory)
+  ipcMain.handle(IPC_CHANNELS.workspaceListDirectory, (event, value: unknown) => {
+    return workspaceService.listDirectory(
+      getTrustedSenderWindow(event),
+      parseListWorkspaceDirectoryRequest(value),
+    )
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceReadFile)
+  ipcMain.handle(IPC_CHANNELS.workspaceReadFile, async (event, value: unknown) => {
+    const senderWindow = getTrustedSenderWindow(event)
+    const result = await workspaceService.readFile(senderWindow, parseWorkspacePathRequest(value))
+    documentService.authorizeDocumentPath(senderWindow, result.filePath, result.relativePath)
+    return result
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceCreateMarkdownFile)
+  ipcMain.handle(IPC_CHANNELS.workspaceCreateMarkdownFile, async (event, value: unknown) => {
+    const senderWindow = getTrustedSenderWindow(event)
+    const entry = await workspaceService.createMarkdownFile(
+      senderWindow,
+      parseCreateWorkspaceEntryRequest(value),
+    )
+    documentService.authorizeDocumentPath(senderWindow, entry.filePath, entry.relativePath)
+    return entry
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceCreateDirectory)
+  ipcMain.handle(IPC_CHANNELS.workspaceCreateDirectory, (event, value: unknown) => {
+    return workspaceService.createDirectory(
+      getTrustedSenderWindow(event),
+      parseCreateWorkspaceEntryRequest(value),
+    )
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceRenameEntry)
+  ipcMain.handle(IPC_CHANNELS.workspaceRenameEntry, async (event, value: unknown) => {
+    const senderWindow = getTrustedSenderWindow(event)
+    const request = parseRenameWorkspaceEntryRequest(value)
+    const previousPath = await workspaceService.resolveEntryPath(senderWindow, request)
+    const entry = await workspaceService.renameEntry(senderWindow, request)
+    documentService.handleWorkspaceEntryRenamed(senderWindow, previousPath, entry.filePath)
+    return entry
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceDeleteEntry)
+  ipcMain.handle(IPC_CHANNELS.workspaceDeleteEntry, async (event, value: unknown) => {
+    const senderWindow = getTrustedSenderWindow(event)
+    const request = parseWorkspacePathRequest(value)
+    const deletedPath = await workspaceService.resolveEntryPath(senderWindow, request)
+    const result = await workspaceService.deleteEntry(senderWindow, request)
+    if (result.deleted) documentService.handleWorkspaceEntryDeleted(senderWindow, deletedPath)
+    return result
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceRevealEntry)
+  ipcMain.handle(IPC_CHANNELS.workspaceRevealEntry, (event, value: unknown) => {
+    return workspaceService.revealEntry(
+      getTrustedSenderWindow(event),
+      parseWorkspacePathRequest(value),
+    )
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceCopyRelativePath)
+  ipcMain.handle(IPC_CHANNELS.workspaceCopyRelativePath, (event, value: unknown) => {
+    return workspaceService.copyRelativePath(
+      getTrustedSenderWindow(event),
+      parseWorkspacePathRequest(value),
+    )
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceSearch)
+  ipcMain.handle(IPC_CHANNELS.workspaceSearch, (event, value: unknown) => {
+    return workspaceService.search(
+      getTrustedSenderWindow(event),
+      parseWorkspaceSearchRequest(value),
+    )
   })
 }

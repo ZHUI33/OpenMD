@@ -39,6 +39,7 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
   forwardedRef,
 ): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
   const mountedEditorRef = useRef<MountedEditor | null>(null)
   const lifecycleRef = useRef<Promise<void>>(Promise.resolve())
   const transitionGenerationRef = useRef(0)
@@ -257,6 +258,44 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
         if (mountedEditor?.mode === 'source') mountedEditor.adapter.setLineWrapping(enabled)
         onSourceLineWrappingChangeRef.current?.(enabled)
       },
+      getScrollPosition: () => {
+        const mountedEditor = mountedEditorRef.current
+        if (mountedEditor?.mode === 'source') {
+          return rootRef.current?.querySelector<HTMLElement>('.cm-scroller')?.scrollTop ?? 0
+        }
+        return scrollContainerRef.current?.scrollTop ?? 0
+      },
+      setScrollPosition: (position) => {
+        const applyPosition = (): void => {
+          const mountedEditor = mountedEditorRef.current
+          const scrollElement =
+            mountedEditor?.mode === 'source'
+              ? rootRef.current?.querySelector<HTMLElement>('.cm-scroller')
+              : scrollContainerRef.current
+          if (scrollElement) scrollElement.scrollTop = Math.max(0, position)
+        }
+        applyPosition()
+        requestAnimationFrame(applyPosition)
+      },
+      revealLine: (line) => {
+        const markdown = coordinatorRef.current!.getMarkdown()
+        const targetLine = Math.max(1, Math.trunc(line))
+        let offset = 0
+        for (
+          let currentLine = 1;
+          currentLine < targetLine && offset < markdown.length;
+          currentLine += 1
+        ) {
+          const match = markdown.slice(offset).match(/\r\n|\r|\n/)
+          if (!match || match.index === undefined) {
+            offset = markdown.length
+            break
+          }
+          offset += match.index + match[0].length
+        }
+        mountedEditorRef.current?.adapter.restoreCursorAnchor?.({ offset })
+        mountedEditorRef.current?.adapter.focus()
+      },
       whenIdle: async () => {
         await lifecycleRef.current
         await mountedEditorRef.current?.adapter.whenStable()
@@ -320,7 +359,10 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
           onVisibleChange={setOutlineVisible}
         />
       ) : null}
-      <div className={mode === 'visual' ? 'openmd-editor-scroll' : 'openmd-source-editor-scroll'}>
+      <div
+        ref={scrollContainerRef}
+        className={mode === 'visual' ? 'openmd-editor-scroll' : 'openmd-source-editor-scroll'}
+      >
         <div
           ref={rootRef}
           className={mode === 'visual' ? 'openmd-editor' : 'openmd-source-editor'}

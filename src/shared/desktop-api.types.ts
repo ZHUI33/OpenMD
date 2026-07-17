@@ -1,3 +1,6 @@
+import type { AppSettings, AppSettingsUpdate } from './settings'
+import type { LoadedUserTheme, UserThemeInfo } from './theme'
+
 export interface AppInfo {
   name: string
   version: string
@@ -23,6 +26,7 @@ export interface SaveDocumentRequest {
   filePath?: string
   content: string
   saveAs?: boolean
+  forbiddenFilePaths?: string[]
 }
 
 export interface SaveDocumentResult {
@@ -34,6 +38,7 @@ export interface SaveDocumentResult {
 export interface ConfirmCloseRequest {
   filePath?: string
   content: string
+  forbiddenFilePaths?: string[]
 }
 
 export type ConfirmCloseAction = 'save' | 'discard' | 'cancel'
@@ -43,10 +48,116 @@ export interface ConfirmCloseResult {
   filePath?: string
 }
 
+export interface ReleaseDocumentRequest {
+  filePath: string
+}
+
 export interface RecentFile {
   path: string
   name: string
   lastOpenedAt: number
+}
+
+export interface WorkspaceInfo {
+  name: string
+  rootPath: string
+}
+
+export interface OpenWorkspaceResult {
+  canceled: boolean
+  workspace?: WorkspaceInfo
+}
+
+export type WorkspaceEntryKind = 'directory' | 'markdown' | 'text'
+
+export interface WorkspaceEntry {
+  name: string
+  relativePath: string
+  filePath: string
+  kind: WorkspaceEntryKind
+}
+
+export interface WorkspacePathRequest {
+  relativePath: string
+}
+
+export interface ListWorkspaceDirectoryRequest {
+  relativePath?: string
+  includeTextFiles?: boolean
+}
+
+export interface WorkspaceFileResult {
+  filePath: string
+  relativePath: string
+  content: string
+}
+
+export interface CreateWorkspaceEntryRequest {
+  parentRelativePath?: string
+  name: string
+}
+
+export interface RenameWorkspaceEntryRequest {
+  relativePath: string
+  newName: string
+}
+
+export interface DeleteWorkspaceEntryResult {
+  deleted: boolean
+}
+
+export interface WorkspaceSearchRequest {
+  query: string
+  caseSensitive?: boolean
+  includeTextFiles?: boolean
+  maxResults?: number
+}
+
+export interface WorkspaceSearchMatch {
+  kind: 'filename' | 'content'
+  filePath: string
+  relativePath: string
+  lineNumber?: number
+  column?: number
+  excerpt: string
+}
+
+export interface WorkspaceSearchResult {
+  matches: WorkspaceSearchMatch[]
+  truncated: boolean
+  filesSearched: number
+  canceled?: boolean
+}
+
+export interface WorkspaceFileChange {
+  type: 'changed' | 'deleted'
+  filePath: string
+  relativePath: string
+  mtimeMs?: number
+  content?: string
+}
+
+export interface WorkspaceApi {
+  open: () => Promise<OpenWorkspaceResult>
+  getCurrent: () => Promise<WorkspaceInfo | undefined>
+  listDirectory: (request?: ListWorkspaceDirectoryRequest) => Promise<WorkspaceEntry[]>
+  readFile: (request: WorkspacePathRequest) => Promise<WorkspaceFileResult>
+  createMarkdownFile: (request: CreateWorkspaceEntryRequest) => Promise<WorkspaceEntry>
+  createDirectory: (request: CreateWorkspaceEntryRequest) => Promise<WorkspaceEntry>
+  renameEntry: (request: RenameWorkspaceEntryRequest) => Promise<WorkspaceEntry>
+  deleteEntry: (request: WorkspacePathRequest) => Promise<DeleteWorkspaceEntryResult>
+  revealEntry: (request: WorkspacePathRequest) => Promise<void>
+  copyRelativePath: (request: WorkspacePathRequest) => Promise<void>
+  search: (request: WorkspaceSearchRequest) => Promise<WorkspaceSearchResult>
+  onFileChange: (listener: (change: WorkspaceFileChange) => void) => () => void
+}
+
+export interface SettingsApi {
+  get: () => Promise<AppSettings>
+  update: (update: AppSettingsUpdate) => Promise<AppSettings>
+  reset: () => Promise<AppSettings>
+  listUserThemes: () => Promise<UserThemeInfo[]>
+  loadUserTheme: (themeId: string) => Promise<LoadedUserTheme>
 }
 
 export type ImageErrorCode =
@@ -123,7 +234,9 @@ export type EditorCommand =
   | { type: 'toggle-source-line-numbers' }
   | { type: 'toggle-source-line-wrapping' }
 
-export type RendererCommand = DocumentCommand | EditorCommand
+export type WorkspaceCommand = { type: 'open-workspace' } | { type: 'search-workspace' }
+
+export type RendererCommand = DocumentCommand | EditorCommand | WorkspaceCommand
 
 export interface DocumentsApi {
   ready: () => Promise<void>
@@ -131,6 +244,7 @@ export interface DocumentsApi {
   openDocument: (request?: OpenDocumentRequest) => Promise<OpenDocumentResult>
   saveDocument: (request: SaveDocumentRequest) => Promise<SaveDocumentResult>
   confirmClose: (request: ConfirmCloseRequest) => Promise<ConfirmCloseResult>
+  releaseDocument: (request: ReleaseDocumentRequest) => Promise<void>
   reload: () => Promise<void>
   resolveClose: (request: ResolveCloseRequest) => Promise<void>
   onCommand: (listener: (command: RendererCommand) => void) => () => void
@@ -140,4 +254,6 @@ export interface OpenMdApi {
   getAppInfo: () => Promise<AppInfo>
   documents: DocumentsApi
   images: ImagesApi
+  workspace: WorkspaceApi
+  settings: SettingsApi
 }

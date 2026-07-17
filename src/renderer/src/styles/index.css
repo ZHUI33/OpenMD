@@ -1,4 +1,5 @@
 @import './theme.css';
+@import './workspace.css';
 @import '@milkdown/crepe/theme/common/style.css';
 @import '@milkdown/crepe/theme/classic.css';
 
@@ -13,13 +14,7 @@ body,
 }
 
 html {
-  font-family:
-    Inter,
-    ui-sans-serif,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  font-family: var(--editor-font-family);
   background: var(--background);
   color: var(--foreground);
 }
@@ -70,7 +65,7 @@ select {
   place-items: center;
   border-radius: 8px;
   background: var(--primary);
-  color: var(--surface);
+  color: var(--primary-contrast);
   font-size: 14px;
 }
 
@@ -301,7 +296,7 @@ select {
 }
 
 .openmd-editor {
-  width: min(100%, 860px);
+  width: min(100%, var(--editor-max-width));
   min-height: 100%;
   margin: 0 auto;
   padding: 56px 0 120px;
@@ -335,8 +330,9 @@ select {
   padding: 0 !important;
   outline: none;
   color: var(--foreground);
-  font-size: 17px;
-  line-height: 1.7;
+  font-family: var(--editor-font-family);
+  font-size: var(--editor-font-size);
+  line-height: var(--editor-line-height);
   overflow-wrap: anywhere;
 }
 
@@ -421,6 +417,10 @@ select {
   text-align: center;
 }
 
+.openmd-editor .katex {
+  color: var(--katex-foreground);
+}
+
 .openmd-math-block[data-state='error'] {
   border-color: color-mix(in srgb, var(--danger) 48%, var(--border));
   text-align: left;
@@ -435,26 +435,55 @@ select {
 .openmd-mermaid-preview {
   min-height: 72px;
   padding: 16px;
-  border: 1px solid #d9dce1;
-  background: #ffffff !important;
-  color: #202124 !important;
+  border: 1px solid var(--border);
+  background: var(--mermaid-background) !important;
+  color: var(--mermaid-foreground) !important;
   cursor: pointer;
 }
 
 .openmd-mermaid-preview svg {
   height: auto;
   max-width: 100%;
+  background: var(--mermaid-background);
+  color: var(--mermaid-foreground);
+}
+
+.openmd-mermaid-preview svg text,
+.openmd-mermaid-preview svg .label,
+.openmd-mermaid-preview svg .nodeLabel {
+  fill: var(--mermaid-foreground) !important;
+  color: var(--mermaid-foreground) !important;
+}
+
+.openmd-mermaid-preview svg .node rect,
+.openmd-mermaid-preview svg .node circle,
+.openmd-mermaid-preview svg .node ellipse,
+.openmd-mermaid-preview svg .node polygon,
+.openmd-mermaid-preview svg .cluster rect {
+  stroke: var(--mermaid-line) !important;
+  fill: var(--mermaid-background) !important;
+}
+
+.openmd-mermaid-preview svg .edgePath path,
+.openmd-mermaid-preview svg .flowchart-link,
+.openmd-mermaid-preview svg .relationshipLine {
+  stroke: var(--mermaid-line) !important;
+}
+
+.openmd-mermaid-preview svg marker path {
+  fill: var(--mermaid-line) !important;
+  stroke: var(--mermaid-line) !important;
 }
 
 .openmd-mermaid-loading {
-  color: #5f6368 !important;
+  color: var(--mermaid-muted) !important;
   cursor: wait;
   font-size: 13px;
 }
 
 .openmd-mermaid-error {
-  border-color: #e8b4b0;
-  color: #b42318 !important;
+  border-color: color-mix(in srgb, var(--mermaid-error) 45%, var(--border));
+  color: var(--mermaid-error) !important;
   cursor: text;
   font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
   font-size: 12px;
@@ -561,7 +590,7 @@ select {
 }
 
 .openmd-editor .ProseMirror p {
-  line-height: 1.7;
+  line-height: var(--editor-line-height);
 }
 
 .openmd-editor .ProseMirror blockquote {
@@ -589,28 +618,28 @@ select {
 }
 
 .openmd-editor .milkdown-code-block {
-  --crepe-color-surface: #24272c;
-  --crepe-color-surface-low: #2d3138;
-  --crepe-color-on-surface: #edf0f5;
-  --crepe-color-on-surface-variant: #c7cdd7;
-  --crepe-color-outline: #8b95a5;
-  --crepe-color-hover: #3a4049;
-  --crepe-color-selected: #334c72;
-  --crepe-color-secondary: #30353d;
+  --crepe-color-surface: var(--code-background);
+  --crepe-color-surface-low: var(--code-surface);
+  --crepe-color-on-surface: var(--code-foreground);
+  --crepe-color-on-surface-variant: var(--code-muted);
+  --crepe-color-outline: var(--code-border);
+  --crepe-color-hover: var(--code-surface);
+  --crepe-color-selected: var(--code-selection);
+  --crepe-color-secondary: var(--code-surface);
 
   margin: 14px 0;
   padding: 8px 16px 16px;
-  border: 1px solid #363b43;
+  border: 1px solid var(--code-border);
   border-radius: 10px;
-  background: #24272c;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 10%);
-  color: #edf0f5;
+  background: var(--code-background);
+  box-shadow: var(--shadow);
+  color: var(--code-foreground);
 }
 
 .openmd-editor .milkdown-code-block .cm-editor,
 .openmd-editor .milkdown-code-block .cm-gutters,
 .openmd-editor .milkdown-code-block .milkdown-code-block-placeholder {
-  background: #24272c;
+  background: var(--code-background);
 }
 
 .openmd-editor .milkdown-code-block .cm-scroller,
@@ -624,17 +653,17 @@ select {
 .openmd-editor .milkdown-code-block .cm-content {
   min-height: 48px;
   padding-block: 6px;
-  caret-color: #ffffff;
+  caret-color: var(--code-foreground);
 }
 
 .openmd-editor .milkdown-code-block .cm-focused .cm-selectionBackground,
 .openmd-editor .milkdown-code-block .cm-selectionBackground {
-  background: #34527d !important;
+  background: var(--code-selection) !important;
 }
 
 .openmd-editor .milkdown-code-block:focus-within,
 .openmd-editor .milkdown-code-block.selected {
-  border-color: color-mix(in srgb, var(--primary) 72%, #363b43);
+  border-color: color-mix(in srgb, var(--primary) 72%, var(--code-border));
   outline: 1px solid color-mix(in srgb, var(--primary) 30%, transparent);
 }
 
@@ -679,8 +708,12 @@ select {
 }
 
 .openmd-editor .milkdown-table-block th {
-  background: var(--surface-subtle);
+  background: var(--table-header-background);
   font-weight: 650;
+}
+
+.openmd-editor .milkdown-table-block tbody tr:nth-child(even) td {
+  background: var(--table-stripe-background);
 }
 
 .openmd-editor .milkdown-table-block tr:last-child td,
@@ -824,12 +857,12 @@ select {
 }
 
 .openmd-image-node[data-state='error'] .openmd-image-visual {
-  border: 1px dashed color-mix(in srgb, var(--danger, #b42318) 55%, var(--border));
+  border: 1px dashed color-mix(in srgb, var(--danger) 55%, var(--border));
 }
 
 .openmd-image-node[data-state='error'] .openmd-image-placeholder {
   padding-bottom: 0;
-  color: var(--danger, #b42318);
+  color: var(--danger);
   font-weight: 650;
 }
 
@@ -897,7 +930,7 @@ select {
 }
 
 .openmd-image-toolbar button[data-danger='true'] {
-  color: var(--danger, #b42318);
+  color: var(--danger);
 }
 
 .openmd-image-alt-field {
@@ -953,8 +986,8 @@ select {
 }
 
 .openmd-image-toast[data-kind='error'] {
-  border-color: color-mix(in srgb, var(--danger, #b42318) 45%, var(--border));
-  color: var(--danger, #b42318);
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--border));
+  color: var(--danger);
 }
 
 @keyframes openmd-image-loading {

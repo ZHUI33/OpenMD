@@ -168,14 +168,14 @@ function sourceBaseTheme(dark: boolean): Extension {
     {
       '&': {
         height: '100%',
-        backgroundColor: 'var(--background)',
+        backgroundColor: 'var(--source-background)',
         color: 'var(--foreground)',
       },
       '&.cm-focused': { outline: 'none' },
       '.cm-scroller': {
-        fontFamily: "'SFMono-Regular', Consolas, 'Liberation Mono', monospace",
-        fontSize: '14px',
-        lineHeight: '1.65',
+        fontFamily: 'var(--editor-font-family)',
+        fontSize: 'var(--editor-font-size)',
+        lineHeight: 'var(--editor-line-height)',
         overflow: 'auto',
       },
       '.cm-content': {
@@ -187,8 +187,8 @@ function sourceBaseTheme(dark: boolean): Extension {
       '.cm-cursor, .cm-dropCursor': { borderLeftColor: 'var(--primary)' },
       '.cm-gutters': {
         borderRight: '1px solid var(--border)',
-        backgroundColor: 'var(--surface)',
-        color: 'var(--muted)',
+        backgroundColor: 'var(--source-gutter-background)',
+        color: 'var(--source-gutter-foreground)',
       },
       '.cm-activeLine': { backgroundColor: 'var(--source-active-line)' },
       '.cm-activeLineGutter': {

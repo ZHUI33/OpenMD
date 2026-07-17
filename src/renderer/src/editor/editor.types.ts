@@ -31,6 +31,9 @@ export interface OpenMdEditorHandle extends EditorDocumentAdapter {
   toggleMode(): Promise<void>
   toggleSourceLineNumbers(): void
   toggleSourceLineWrapping(): void
+  getScrollPosition?(): number
+  setScrollPosition?(position: number): void
+  revealLine?(line: number): void
   whenIdle(): Promise<void>
 }
 

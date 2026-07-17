@@ -22,6 +22,7 @@ import {
   readSupportedImageFile,
   writeImageAsset,
 } from './image-assets'
+import type { ImageAssetLocationOptions } from './image-assets'
 import { areSameFilePaths } from './recent-files'
 
 const IMAGE_FILTERS = [{ name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg'] }]
@@ -34,8 +35,12 @@ function asOperationError(error: unknown, fallback: ImageOperationError): ImageO
 
 export class ImageService {
   constructor(
-    private readonly documents: Pick<DocumentService, 'getCurrentPath'>,
+    private readonly documents: Pick<DocumentService, 'getAuthorizedDocumentPath'>,
     private readonly now: () => Date = () => new Date(),
+    private readonly getLocationOptions: (
+      parentWindow: BrowserWindow,
+      documentPath: string,
+    ) => Promise<ImageAssetLocationOptions> | ImageAssetLocationOptions = () => ({}),
   ) {}
 
   async saveImage(
@@ -57,7 +62,14 @@ export class ImageService {
         getSupportedImageExtension(suggestedName ?? ''),
       )
 
-      const writtenImage = await writeImageAsset(documentPath, suggestedName, image, this.now())
+      const locationOptions = await this.getLocationOptions(parentWindow, documentPath)
+      const writtenImage = await writeImageAsset(
+        documentPath,
+        suggestedName,
+        image,
+        this.now(),
+        locationOptions,
+      )
       return {
         canceled: false,
         relativePath: writtenImage.relativePath,
@@ -90,11 +102,13 @@ export class ImageService {
 
       const sourcePath = selection.filePaths[0]
       const image = await readSupportedImageFile(sourcePath)
+      const locationOptions = await this.getLocationOptions(parentWindow, documentPath)
       const writtenImage = await writeImageAsset(
         documentPath,
         basename(sourcePath),
         image,
         this.now(),
+        locationOptions,
       )
       return {
         canceled: false,
@@ -126,7 +140,11 @@ export class ImageService {
         throw new ImageAssetError('invalid-path', '远程图片只允许使用 HTTP 或 HTTPS 地址。')
       }
 
-      const image = await readLocalMarkdownImage(documentPath, source)
+      const locationOptions = await this.getLocationOptions(parentWindow, documentPath)
+      const readLocationOptions = locationOptions.workspaceRoot
+        ? { ...locationOptions, rule: 'workspace-assets' as const }
+        : locationOptions
+      const image = await readLocalMarkdownImage(documentPath, source, readLocationOptions)
       return { ok: true, url: imageToDataUrl(image), pathHint: source }
     } catch (error) {
       this.logError('resolve', error)
@@ -145,14 +163,17 @@ export class ImageService {
     parentWindow: BrowserWindow,
     requestedDocumentPath: string,
   ): string {
-    const currentPath = this.documents.getCurrentPath(parentWindow)
-    if (!currentPath) {
+    if (!requestedDocumentPath) {
       throw new ImageAssetError('document-not-saved', '请先保存 Markdown 文档，再插入图片。')
     }
-    if (!requestedDocumentPath || !areSameFilePaths(currentPath, requestedDocumentPath)) {
+    const authorizedPath = this.documents.getAuthorizedDocumentPath(
+      parentWindow,
+      requestedDocumentPath,
+    )
+    if (!authorizedPath || !areSameFilePaths(authorizedPath, requestedDocumentPath)) {
       throw new ImageAssetError('unauthorized-document', '图片操作未获当前文档授权。')
     }
-    return currentPath
+    return authorizedPath
   }
 
   private logError(operation: 'save' | 'select' | 'resolve', error: unknown): void {

@@ -1,8 +1,9 @@
 import { lstat, mkdir, open, readFile, realpath, rm, stat } from 'node:fs/promises'
-import { dirname, extname, isAbsolute, join, posix, relative, win32 } from 'node:path'
+import { extname, isAbsolute, join, posix, relative, win32 } from 'node:path'
 
 import type { ImageErrorCode } from '../shared/desktop-api.types'
 import { encodeMarkdownPath } from '../shared/image-utils'
+import type { ImageAssetDirectoryRule } from '../shared/settings'
 
 export const MAX_IMAGE_BYTES = 25 * 1024 * 1024
 
@@ -45,6 +46,12 @@ export interface PreparedImage {
 export interface WrittenImageAsset {
   absolutePath: string
   relativePath: string
+}
+
+export interface ImageAssetLocationOptions {
+  rule?: ImageAssetDirectoryRule
+  customDirectory?: string
+  workspaceRoot?: string
 }
 
 function pathApiFor(filePath: string): PathApi {
@@ -93,9 +100,35 @@ export function getImageAssetDirectoryName(documentPath: string): string {
   return `${parsed.name || 'document'}.assets`
 }
 
-export function getImageAssetDirectoryPath(documentPath: string): string {
+export function getImageAssetRootPath(
+  documentPath: string,
+  options: Readonly<ImageAssetLocationOptions> = {},
+): string {
   const pathApi = pathApiFor(documentPath)
-  return pathApi.join(pathApi.dirname(documentPath), getImageAssetDirectoryName(documentPath))
+  const documentDirectory = pathApi.dirname(documentPath)
+  if (options.rule !== 'workspace-assets' || !options.workspaceRoot) return documentDirectory
+
+  const relativeDocumentPath = pathApi.relative(options.workspaceRoot, documentPath)
+  return isOutside(relativeDocumentPath, pathApi) ? documentDirectory : options.workspaceRoot
+}
+
+export function getImageAssetDirectoryPath(
+  documentPath: string,
+  options: Readonly<ImageAssetLocationOptions> = {},
+): string {
+  const pathApi = pathApiFor(documentPath)
+  const documentDirectory = pathApi.dirname(documentPath)
+  switch (options.rule) {
+    case 'assets':
+      return pathApi.join(documentDirectory, 'assets')
+    case 'workspace-assets':
+      return pathApi.join(getImageAssetRootPath(documentPath, options), 'assets')
+    case 'custom':
+      return pathApi.join(documentDirectory, options.customDirectory || 'assets')
+    case 'document-name':
+    case undefined:
+      return pathApi.join(documentDirectory, getImageAssetDirectoryName(documentPath))
+  }
 }
 
 export function getSupportedImageExtension(fileName: string): SupportedImageExtension | undefined {
@@ -138,13 +171,19 @@ export function withImageFilenameSuffix(fileName: string, collisionIndex: number
   return `${stem}-${collisionIndex + 1}${extension}`
 }
 
-export function toMarkdownRelativePath(documentPath: string, imagePath: string): string {
+export function toMarkdownRelativePath(
+  documentPath: string,
+  imagePath: string,
+  options: Readonly<ImageAssetLocationOptions> = {},
+): string {
   const pathApi = pathApiFor(documentPath)
   const documentDirectory = pathApi.dirname(documentPath)
   const imageRelativePath = pathApi.relative(documentDirectory, imagePath)
+  const allowedRoot = getImageAssetRootPath(documentPath, options)
+  const allowedRelativePath = pathApi.relative(allowedRoot, imagePath)
 
-  if (!imageRelativePath || isOutside(imageRelativePath, pathApi)) {
-    throw new ImageAssetError('invalid-path', '图片路径必须位于当前文档目录内。')
+  if (!imageRelativePath || isOutside(allowedRelativePath, pathApi)) {
+    throw new ImageAssetError('invalid-path', '图片路径超出了允许的资源目录范围。')
   }
 
   return encodeMarkdownPath(imageRelativePath)
@@ -164,7 +203,11 @@ export function parseRemoteImageUrl(source: string): string | undefined {
   }
 }
 
-export function resolveMarkdownImagePath(documentPath: string, source: string): string {
+export function resolveMarkdownImagePath(
+  documentPath: string,
+  source: string,
+  options: Readonly<ImageAssetLocationOptions> = {},
+): string {
   const trimmedSource = source.trim()
   if (!trimmedSource || trimmedSource.includes('\0')) {
     throw new ImageAssetError('invalid-path', '图片路径无效。')
@@ -190,10 +233,9 @@ export function resolveMarkdownImagePath(documentPath: string, source: string): 
   }
 
   const segments = portableSource.split('/')
-  if (segments.some((segment) => segment === '..')) {
+  if (options.rule !== 'workspace-assets' && segments.some((segment) => segment === '..')) {
     throw new ImageAssetError('invalid-path', '图片路径不能包含上级目录。')
   }
-
   const usefulSegments = segments.filter((segment) => segment && segment !== '.')
   if (usefulSegments.length === 0) {
     throw new ImageAssetError('invalid-path', '图片路径无效。')
@@ -202,9 +244,10 @@ export function resolveMarkdownImagePath(documentPath: string, source: string): 
   const pathApi = pathApiFor(documentPath)
   const documentDirectory = pathApi.dirname(documentPath)
   const imagePath = pathApi.resolve(documentDirectory, ...usefulSegments)
-  const imageRelativePath = pathApi.relative(documentDirectory, imagePath)
-  if (isOutside(imageRelativePath, pathApi)) {
-    throw new ImageAssetError('invalid-path', '图片路径超出了当前文档目录。')
+  const allowedRoot = getImageAssetRootPath(documentPath, options)
+  const allowedRelativePath = pathApi.relative(allowedRoot, imagePath)
+  if (isOutside(allowedRelativePath, pathApi)) {
+    throw new ImageAssetError('invalid-path', '图片路径超出了允许的资源目录范围。')
   }
 
   return imagePath
@@ -424,19 +467,21 @@ export async function readSupportedImageFile(sourcePath: string): Promise<Prepar
 async function assertSafeAssetDirectory(
   documentPath: string,
   assetDirectory: string,
+  options: Readonly<ImageAssetLocationOptions>,
 ): Promise<void> {
   const assetStats = await lstat(assetDirectory)
   if (!assetStats.isDirectory() || assetStats.isSymbolicLink()) {
     throw new ImageAssetError('invalid-path', '图片资源目录不是安全的普通目录。')
   }
 
-  const [realDocumentDirectory, realAssetDirectory] = await Promise.all([
-    realpath(dirname(documentPath)),
+  const allowedRoot = getImageAssetRootPath(documentPath, options)
+  const [realAllowedRoot, realAssetDirectory] = await Promise.all([
+    realpath(allowedRoot),
     realpath(assetDirectory),
   ])
-  const realRelativePath = relative(realDocumentDirectory, realAssetDirectory)
-  if (!realRelativePath || isOutside(realRelativePath, pathApiFor(realDocumentDirectory))) {
-    throw new ImageAssetError('invalid-path', '图片资源目录超出了当前文档目录。')
+  const realRelativePath = relative(realAllowedRoot, realAssetDirectory)
+  if (!realRelativePath || isOutside(realRelativePath, pathApiFor(realAllowedRoot))) {
+    throw new ImageAssetError('invalid-path', '图片资源目录超出了允许的资源目录范围。')
   }
 }
 
@@ -445,6 +490,7 @@ export async function writeImageAsset(
   suggestedName: string | undefined,
   image: PreparedImage,
   now = new Date(),
+  locationOptions: Readonly<ImageAssetLocationOptions> = {},
 ): Promise<WrittenImageAsset> {
   try {
     const documentStats = await stat(documentPath)
@@ -452,9 +498,9 @@ export async function writeImageAsset(
       throw new ImageAssetError('image-not-found', '当前 Markdown 文档已被移动或删除。')
     }
 
-    const assetDirectory = getImageAssetDirectoryPath(documentPath)
+    const assetDirectory = getImageAssetDirectoryPath(documentPath, locationOptions)
     await mkdir(assetDirectory, { recursive: true })
-    await assertSafeAssetDirectory(documentPath, assetDirectory)
+    await assertSafeAssetDirectory(documentPath, assetDirectory, locationOptions)
 
     const safeFileName = sanitizeImageFileName(suggestedName, image.extension, now)
     for (let collisionIndex = 0; collisionIndex < 10_000; collisionIndex += 1) {
@@ -483,7 +529,7 @@ export async function writeImageAsset(
       await candidateHandle.close()
       return {
         absolutePath: candidatePath,
-        relativePath: toMarkdownRelativePath(documentPath, candidatePath),
+        relativePath: toMarkdownRelativePath(documentPath, candidatePath, locationOptions),
       }
     }
 
@@ -499,8 +545,9 @@ export async function writeImageAsset(
 export async function readLocalMarkdownImage(
   documentPath: string,
   source: string,
+  locationOptions: Readonly<ImageAssetLocationOptions> = {},
 ): Promise<PreparedImage> {
-  const imagePath = resolveMarkdownImagePath(documentPath, source)
+  const imagePath = resolveMarkdownImagePath(documentPath, source, locationOptions)
   const expectedExtension = getSupportedImageExtension(imagePath)
   if (!expectedExtension) {
     throw new ImageAssetError('unsupported-image', '仅支持 PNG、JPEG、GIF、WebP 和 SVG 图片。')
@@ -515,13 +562,14 @@ export async function readLocalMarkdownImage(
       throw new ImageAssetError('image-too-large', '图片不能超过 25 MB。')
     }
 
-    const [realDocumentDirectory, realImagePath] = await Promise.all([
-      realpath(dirname(documentPath)),
+    const allowedRoot = getImageAssetRootPath(documentPath, locationOptions)
+    const [realAllowedRoot, realImagePath] = await Promise.all([
+      realpath(allowedRoot),
       realpath(imagePath),
     ])
-    const imageRelativePath = relative(realDocumentDirectory, realImagePath)
-    if (!imageRelativePath || isOutside(imageRelativePath, pathApiFor(realDocumentDirectory))) {
-      throw new ImageAssetError('invalid-path', '图片路径超出了当前文档目录。')
+    const imageRelativePath = relative(realAllowedRoot, realImagePath)
+    if (!imageRelativePath || isOutside(imageRelativePath, pathApiFor(realAllowedRoot))) {
+      throw new ImageAssetError('invalid-path', '图片路径超出了允许的资源目录范围。')
     }
 
     return prepareImageBytes(await readFile(realImagePath), expectedExtension)

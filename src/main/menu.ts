@@ -37,6 +37,11 @@ export function installApplicationMenu(
       click: () => sendCommand({ type: 'open' }),
     },
     {
+      label: '打开文件夹工作区…',
+      accelerator: 'CmdOrCtrl+Shift+O',
+      click: () => sendCommand({ type: 'open-workspace' }),
+    },
+    {
       label: '最近打开',
       submenu: createRecentFilesSubmenu(recentFiles, sendCommand),
     },
@@ -95,6 +100,12 @@ export function installApplicationMenu(
         { label: '复制', role: 'copy' },
         { label: '粘贴', role: 'paste' },
         { label: '全选', role: 'selectAll' },
+        { type: 'separator' },
+        {
+          label: '在工作区中搜索',
+          accelerator: 'CmdOrCtrl+Shift+F',
+          click: () => sendCommand({ type: 'search-workspace' }),
+        },
       ],
     },
     {

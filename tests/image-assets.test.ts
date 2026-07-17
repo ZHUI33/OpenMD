@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -42,6 +42,24 @@ describe('image asset path utilities', () => {
     expect(sanitizeImageFileName('..\\CON.jpeg', 'jpeg', now)).toBe('_CON.jpeg')
     expect(sanitizeImageFileName('CON.preview.png', 'png', now)).toBe('_CON.preview.png')
     expect(sanitizeImageFileName(undefined, 'png', now)).toBe('image-20260710-203001.png')
+  })
+
+  it('derives configured document, custom, and workspace asset directories', () => {
+    expect(getImageAssetDirectoryPath('/work/docs/article.md', { rule: 'assets' })).toBe(
+      '/work/docs/assets',
+    )
+    expect(
+      getImageAssetDirectoryPath('/work/docs/article.md', {
+        rule: 'custom',
+        customDirectory: 'media/images',
+      }),
+    ).toBe('/work/docs/media/images')
+    expect(
+      getImageAssetDirectoryPath('/work/docs/article.md', {
+        rule: 'workspace-assets',
+        workspaceRoot: '/work',
+      }),
+    ).toBe('/work/assets')
   })
 
   it('adds deterministic suffixes without changing the extension', () => {
@@ -117,6 +135,29 @@ describe('image asset file operations', () => {
     expect(second.relativePath).toBe('article.assets/architecture-2.png')
     await expect(readFile(first.absolutePath)).resolves.toEqual(Buffer.from(MINIMAL_PNG))
     await expect(readFile(second.absolutePath)).resolves.toEqual(Buffer.from(MINIMAL_PNG))
+  })
+
+  it('writes workspace assets and safely resolves their parent-relative Markdown path', async () => {
+    const documentDirectory = join(temporaryDirectory, 'docs', 'nested')
+    await mkdir(documentDirectory, { recursive: true })
+    const documentPath = join(documentDirectory, 'article.md')
+    await writeFile(documentPath, '# Article')
+    const image = prepareImageBytes(MINIMAL_PNG, 'png')
+    const options = {
+      rule: 'workspace-assets' as const,
+      workspaceRoot: temporaryDirectory,
+    }
+
+    const written = await writeImageAsset(documentPath, 'diagram.png', image, new Date(), options)
+
+    expect(written.absolutePath).toBe(join(temporaryDirectory, 'assets', 'diagram.png'))
+    expect(written.relativePath).toBe('../../assets/diagram.png')
+    expect(resolveMarkdownImagePath(documentPath, written.relativePath, options)).toBe(
+      written.absolutePath,
+    )
+    expect(() => resolveMarkdownImagePath(documentPath, '../../../outside.png', options)).toThrow(
+      ImageAssetError,
+    )
   })
 
   it('rejects bytes that do not match the requested image extension', () => {

@@ -1,26 +1,27 @@
-import type { ChangeEvent, JSX } from 'react'
+import type { JSX } from 'react'
 
-import { formatDocumentTitle } from '../../../shared/document-utils'
-import { useAppStore } from '../stores/app-store'
-import type { Theme } from '../stores/app-store'
+import { useEditorTabsStore } from '../stores/editor-tabs-store'
 
 export interface TitleBarProps {
   onInsertImage?: () => void
   insertImageDisabled?: boolean
+  onToggleSidebar?: () => void
+  onOpenWorkspace?: () => void
+  onOpenSearch?: () => void
+  onOpenSettings?: () => void
 }
 
 export function TitleBar({
   onInsertImage,
   insertImageDisabled = false,
+  onToggleSidebar,
+  onOpenWorkspace,
+  onOpenSearch,
+  onOpenSettings,
 }: TitleBarProps): JSX.Element {
-  const theme = useAppStore((state) => state.theme)
-  const setTheme = useAppStore((state) => state.setTheme)
-  const dirty = useAppStore((state) => state.document.dirty)
-  const filePath = useAppStore((state) => state.document.filePath)
-
-  const handleThemeChange = (event: ChangeEvent<HTMLSelectElement>): void => {
-    setTheme(event.currentTarget.value as Theme)
-  }
+  const activeTab = useEditorTabsStore((state) =>
+    state.tabs.find((tab) => tab.id === state.activeTabId),
+  )
 
   return (
     <header className="title-bar">
@@ -28,12 +29,33 @@ export function TitleBar({
         <span className="brand-mark" aria-hidden="true">
           M
         </span>
-        <span className="brand-name">{formatDocumentTitle(filePath, dirty)}</span>
+        <span className="brand-name">
+          {activeTab ? `${activeTab.title}${activeTab.dirty ? ' *' : ''} — OpenMD` : 'OpenMD'}
+        </span>
       </div>
 
       <div className="title-actions">
+        <button className="title-action-button" type="button" onClick={onToggleSidebar}>
+          文件树
+        </button>
         <button
-          className="insert-image-button"
+          className="title-action-button"
+          type="button"
+          title="打开文件夹 (Ctrl/Cmd+Shift+O)"
+          onClick={onOpenWorkspace}
+        >
+          打开文件夹
+        </button>
+        <button
+          className="title-action-button"
+          type="button"
+          title="全文搜索 (Ctrl/Cmd+Shift+F)"
+          onClick={onOpenSearch}
+        >
+          搜索
+        </button>
+        <button
+          className="title-action-button"
           type="button"
           disabled={insertImageDisabled}
           title={insertImageDisabled ? '请切换到所见即所得模式后插入图片' : undefined}
@@ -41,14 +63,9 @@ export function TitleBar({
         >
           插入图片
         </button>
-        <label className="theme-control">
-          <span>主题</span>
-          <select aria-label="主题" value={theme} onChange={handleThemeChange}>
-            <option value="system">跟随系统</option>
-            <option value="light">浅色</option>
-            <option value="dark">深色</option>
-          </select>
-        </label>
+        <button className="title-action-button" type="button" onClick={onOpenSettings}>
+          设置
+        </button>
       </div>
     </header>
   )
