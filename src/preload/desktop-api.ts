@@ -5,6 +5,8 @@ import type {
   ConfirmCloseRequest,
   ConfirmCloseResult,
   DocumentCommand,
+  ResolveImageRequest,
+  ResolveImageResult,
   NewDocumentResult,
   OpenDocumentRequest,
   OpenDocumentResult,
@@ -12,6 +14,9 @@ import type {
   ResolveCloseRequest,
   SaveDocumentRequest,
   SaveDocumentResult,
+  SaveImageRequest,
+  SaveImageResult,
+  SelectImageRequest,
 } from '../shared/desktop-api.types'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 
@@ -42,5 +47,13 @@ export const openMdApi: OpenMdApi = Object.freeze({
         ipcRenderer.removeListener(IPC_CHANNELS.documentsCommand, ipcListener)
       }
     },
+  }),
+  images: Object.freeze({
+    saveImage: (request: SaveImageRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.imagesSave, request) as Promise<SaveImageResult>,
+    selectImage: (request: SelectImageRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.imagesSelect, request) as Promise<SaveImageResult>,
+    resolveImage: (request: ResolveImageRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.imagesResolve, request) as Promise<ResolveImageResult>,
   }),
 })

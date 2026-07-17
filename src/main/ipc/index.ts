@@ -8,11 +8,15 @@ import type {
   AppInfo,
   ConfirmCloseRequest,
   OpenDocumentRequest,
+  ResolveImageRequest,
   ResolveCloseRequest,
   SaveDocumentRequest,
+  SaveImageRequest,
+  SelectImageRequest,
 } from '../../shared/desktop-api.types'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { DocumentService } from '../document-service'
+import type { ImageService } from '../image-service'
 import { markRendererReady, reloadMainWindow, resolveCloseRequest } from '../window'
 
 function isTrustedRendererUrl(frameUrl: string): boolean {
@@ -95,7 +99,44 @@ function parseResolveCloseRequest(value: unknown): ResolveCloseRequest {
   return { intent: value.intent, requestId: value.requestId, proceed: value.proceed }
 }
 
-export function registerIpcHandlers(documentService: DocumentService): void {
+function parseSaveImageRequest(value: unknown): SaveImageRequest {
+  if (
+    !isRecord(value) ||
+    typeof value.documentPath !== 'string' ||
+    !(value.bytes instanceof Uint8Array) ||
+    (value.suggestedName !== undefined && typeof value.suggestedName !== 'string')
+  ) {
+    throw new TypeError('Invalid save image request.')
+  }
+  return {
+    documentPath: value.documentPath,
+    bytes: value.bytes,
+    suggestedName: value.suggestedName as string | undefined,
+  }
+}
+
+function parseSelectImageRequest(value: unknown): SelectImageRequest {
+  if (!isRecord(value) || typeof value.documentPath !== 'string') {
+    throw new TypeError('Invalid select image request.')
+  }
+  return { documentPath: value.documentPath }
+}
+
+function parseResolveImageRequest(value: unknown): ResolveImageRequest {
+  if (
+    !isRecord(value) ||
+    typeof value.documentPath !== 'string' ||
+    typeof value.source !== 'string'
+  ) {
+    throw new TypeError('Invalid resolve image request.')
+  }
+  return { documentPath: value.documentPath, source: value.source }
+}
+
+export function registerIpcHandlers(
+  documentService: DocumentService,
+  imageService: ImageService,
+): void {
   ipcMain.removeHandler(IPC_CHANNELS.appGetInfo)
   ipcMain.handle(IPC_CHANNELS.appGetInfo, (event): AppInfo => {
     getTrustedSenderWindow(event)
@@ -147,5 +188,23 @@ export function registerIpcHandlers(documentService: DocumentService): void {
   ipcMain.handle(IPC_CHANNELS.documentsReload, (event) => {
     const senderWindow = getTrustedSenderWindow(event)
     reloadMainWindow(senderWindow, documentService.getCurrentPath(senderWindow))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.imagesSave)
+  ipcMain.handle(IPC_CHANNELS.imagesSave, (event, value: unknown) => {
+    const senderWindow = getTrustedSenderWindow(event)
+    return imageService.saveImage(senderWindow, parseSaveImageRequest(value))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.imagesSelect)
+  ipcMain.handle(IPC_CHANNELS.imagesSelect, (event, value: unknown) => {
+    const senderWindow = getTrustedSenderWindow(event)
+    return imageService.selectImage(senderWindow, parseSelectImageRequest(value))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.imagesResolve)
+  ipcMain.handle(IPC_CHANNELS.imagesResolve, (event, value: unknown) => {
+    const senderWindow = getTrustedSenderWindow(event)
+    return imageService.resolveImage(senderWindow, parseResolveImageRequest(value))
   })
 }

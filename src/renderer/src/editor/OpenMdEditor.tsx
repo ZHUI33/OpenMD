@@ -7,7 +7,14 @@ import type { OpenMdEditorHandle, OpenMdEditorProps } from './editor.types'
 const CHANGE_DEBOUNCE_MS = 180
 
 export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(function OpenMdEditor(
-  { initialMarkdown = '', readOnly = false, onChange },
+  {
+    initialMarkdown = '',
+    readOnly = false,
+    onChange,
+    documentPath,
+    imagesApi,
+    onEnsureDocumentSaved,
+  },
   forwardedRef,
 ): JSX.Element {
   const rootRef = useRef<HTMLDivElement>(null)
@@ -15,9 +22,15 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
   const initialMarkdownRef = useRef(initialMarkdown)
   const initialReadOnlyRef = useRef(readOnly)
   const onChangeRef = useRef(onChange)
+  const imagesApiRef = useRef(imagesApi)
+  const documentPathRef = useRef(documentPath)
+  const ensureDocumentSavedRef = useRef(onEnsureDocumentSaved)
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   onChangeRef.current = onChange
+  imagesApiRef.current = imagesApi
+  documentPathRef.current = documentPath
+  ensureDocumentSavedRef.current = onEnsureDocumentSaved
 
   useImperativeHandle(
     forwardedRef,
@@ -41,6 +54,7 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
       },
       setReadOnly: (nextReadOnly) => adapterRef.current?.setReadOnly(nextReadOnly),
       focus: () => adapterRef.current?.focus(),
+      insertImageFromPicker: async () => adapterRef.current?.insertImageFromPicker(),
     }),
     [],
   )
@@ -53,6 +67,9 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
       root,
       initialMarkdown: initialMarkdownRef.current,
       readOnly: initialReadOnlyRef.current,
+      imagesApi: imagesApiRef.current,
+      getDocumentPath: () => documentPathRef.current,
+      onEnsureDocumentSaved: async () => ensureDocumentSavedRef.current?.(),
       onChange: (markdown) => {
         if (timerRef.current) clearTimeout(timerRef.current)
         timerRef.current = setTimeout(() => {
@@ -74,6 +91,10 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
   useEffect(() => {
     adapterRef.current?.setReadOnly(readOnly)
   }, [readOnly])
+
+  useEffect(() => {
+    adapterRef.current?.setDocumentPath(documentPath)
+  }, [documentPath])
 
   return <div ref={rootRef} className="openmd-editor" aria-label="Markdown 正文编辑器" />
 })

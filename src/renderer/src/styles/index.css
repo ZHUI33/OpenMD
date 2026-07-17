@@ -104,6 +104,29 @@ select {
   box-shadow: 0 0 0 3px var(--primary-soft);
 }
 
+.title-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.insert-image-button {
+  height: 32px;
+  padding: 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+  color: var(--foreground);
+  cursor: pointer;
+}
+
+.insert-image-button:hover,
+.insert-image-button:focus-visible {
+  border-color: var(--primary);
+  outline: none;
+  background: var(--primary-soft);
+}
+
 .workspace {
   min-height: 0;
   overflow-y: auto;
@@ -358,6 +381,242 @@ select {
 .openmd-editor .ProseMirror .milkdown-list-item-block > .list-item > .children > p {
   min-height: 32px;
   padding: 4px 0;
+}
+
+.openmd-image-node {
+  position: relative;
+  display: inline-flex;
+  max-width: 100%;
+  margin: 10px 2px;
+  flex-direction: column;
+  align-items: flex-start;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  line-height: 1.4;
+  vertical-align: middle;
+}
+
+.openmd-image-node.ProseMirror-selectednode {
+  border-color: var(--primary);
+  outline: 3px solid var(--primary-soft);
+}
+
+.openmd-image-visual {
+  position: relative;
+  display: grid;
+  min-width: 140px;
+  min-height: 86px;
+  overflow: hidden;
+  place-items: center;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+
+.openmd-image-node[data-size='small'] {
+  width: min(240px, 100%);
+}
+
+.openmd-image-node[data-size='medium'] {
+  width: min(480px, 100%);
+}
+
+.openmd-image-node[data-size='large'] {
+  width: 100%;
+}
+
+.openmd-image-node[data-size='original'] {
+  width: auto;
+}
+
+.openmd-image {
+  display: block;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.openmd-image-node[data-size='small'] .openmd-image,
+.openmd-image-node[data-size='medium'] .openmd-image,
+.openmd-image-node[data-size='large'] .openmd-image {
+  width: 100%;
+}
+
+.openmd-image-node[data-size='original'] .openmd-image {
+  max-width: none;
+}
+
+.openmd-image-node[data-state='loading'] .openmd-image,
+.openmd-image-node[data-state='error'] .openmd-image {
+  display: none;
+}
+
+.openmd-image-placeholder,
+.openmd-image-status {
+  display: none;
+  max-width: 360px;
+  padding: 8px 14px;
+  color: var(--muted);
+  font-size: 13px;
+  text-align: center;
+}
+
+.openmd-image-node[data-state='loading'] .openmd-image-placeholder,
+.openmd-image-node[data-state='error'] .openmd-image-placeholder,
+.openmd-image-node[data-state='error'] .openmd-image-status {
+  display: block;
+}
+
+.openmd-image-node[data-state='loading'] .openmd-image-visual {
+  background: linear-gradient(
+    100deg,
+    var(--surface-subtle) 30%,
+    var(--primary-soft) 48%,
+    var(--surface-subtle) 66%
+  );
+  background-size: 220% 100%;
+  animation: openmd-image-loading 1.4s ease-in-out infinite;
+}
+
+.openmd-image-node[data-state='error'] .openmd-image-visual {
+  border: 1px dashed color-mix(in srgb, var(--danger, #b42318) 55%, var(--border));
+}
+
+.openmd-image-node[data-state='error'] .openmd-image-placeholder {
+  padding-bottom: 0;
+  color: var(--danger, #b42318);
+  font-weight: 650;
+}
+
+.openmd-image-path {
+  display: block;
+  width: 100%;
+  padding: 4px 6px 1px;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  opacity: 0;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: opacity 120ms ease;
+}
+
+.openmd-image-node:hover .openmd-image-path,
+.openmd-image-node.ProseMirror-selectednode .openmd-image-path,
+.openmd-image-node[data-state='error'] .openmd-image-path {
+  opacity: 1;
+}
+
+.openmd-image-toolbar {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% + 5px);
+  left: 0;
+  display: none;
+  width: max-content;
+  max-width: min(720px, calc(100vw - 32px));
+  padding: 6px;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--foreground);
+  font-size: 12px;
+}
+
+.openmd-image-node.ProseMirror-selectednode .openmd-image-toolbar,
+.openmd-image-toolbar:focus-within {
+  display: flex;
+}
+
+.openmd-image-toolbar button {
+  min-width: 30px;
+  height: 28px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.openmd-image-toolbar button:hover,
+.openmd-image-toolbar button:focus-visible {
+  outline: none;
+  background: var(--surface-subtle);
+}
+
+.openmd-image-toolbar button[data-danger='true'] {
+  color: var(--danger, #b42318);
+}
+
+.openmd-image-alt-field {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--muted);
+}
+
+.openmd-image-alt-field input {
+  width: 150px;
+  height: 28px;
+  padding: 0 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+}
+
+.openmd-image-alt-field input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+.openmd-image-uploading {
+  display: inline-flex;
+  min-width: 160px;
+  min-height: 72px;
+  margin: 8px 2px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.openmd-image-toast {
+  position: fixed;
+  z-index: 1600;
+  right: 20px;
+  bottom: 44px;
+  max-width: min(420px, calc(100vw - 40px));
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  color: var(--foreground);
+  font-size: 13px;
+}
+
+.openmd-image-toast[data-kind='error'] {
+  border-color: color-mix(in srgb, var(--danger, #b42318) 45%, var(--border));
+  color: var(--danger, #b42318);
+}
+
+@keyframes openmd-image-loading {
+  to {
+    background-position: -120% 0;
+  }
 }
 
 .openmd-inline-marker,

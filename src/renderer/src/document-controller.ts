@@ -24,6 +24,28 @@ export class DocumentController {
     return operation
   }
 
+  /**
+   * Ensure image ingestion has a stable document directory. This runs through
+   * the same queue as menu commands, so concurrent Save/Save As requests cannot
+   * open competing dialogs. A cancelled dialog resolves to undefined.
+   */
+  ensureDocumentSaved(): Promise<string | undefined> {
+    const operation = this.commandQueue.then(async () => {
+      const currentPath = useAppStore.getState().document.filePath
+      if (currentPath) return currentPath
+
+      const saved = await this.saveDocument(false)
+      return saved ? useAppStore.getState().document.filePath : undefined
+    })
+    this.commandQueue = operation.then(
+      () => undefined,
+      (error: unknown) => {
+        console.error('Document save required for image insertion failed:', error)
+      },
+    )
+    return operation
+  }
+
   private async executeCommand(command: DocumentCommand): Promise<void> {
     switch (command.type) {
       case 'new':

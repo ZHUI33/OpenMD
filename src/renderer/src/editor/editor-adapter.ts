@@ -20,6 +20,7 @@ import {
   isInlineSourceEditing,
 } from './inline-source-plugin'
 import { openMdInsertMenuConfig } from './insert-menu-config'
+import { createOpenMdImageFeature, type RendererImagesApi } from './image-feature'
 import { listEditingPlugin } from './list-editing-plugin'
 import { openMdTableFeatures, openMdTablePlugins } from './table-feature'
 
@@ -28,10 +29,26 @@ export interface EditorAdapterOptions {
   initialMarkdown: string
   readOnly: boolean
   onChange: (markdown: string) => void
+  imagesApi?: RendererImagesApi
+  getDocumentPath?: () => string | undefined
+  onEnsureDocumentSaved?: () => Promise<string | undefined>
+}
+
+const unavailableImagesApi: RendererImagesApi = {
+  saveImage: async () => ({
+    canceled: false,
+    error: { code: 'invalid-request', message: '图片保存服务不可用。' },
+  }),
+  selectImage: async () => ({ canceled: true }),
+  resolveImage: async () => ({
+    ok: false,
+    error: { code: 'invalid-request', message: '图片读取服务不可用。' },
+  }),
 }
 
 export class OpenMdEditorAdapter {
   private readonly crepe: Crepe
+  private readonly imageFeature: ReturnType<typeof createOpenMdImageFeature>
   private markdown: string
   private markdownDocument: ProseMirrorNode | null = null
   private programmaticDocument: ProseMirrorNode | null = null
@@ -40,6 +57,11 @@ export class OpenMdEditorAdapter {
 
   constructor(options: EditorAdapterOptions) {
     this.markdown = options.initialMarkdown
+    this.imageFeature = createOpenMdImageFeature({
+      imagesApi: options.imagesApi ?? unavailableImagesApi,
+      getDocumentPath: options.getDocumentPath ?? (() => undefined),
+      onEnsureDocumentSaved: options.onEnsureDocumentSaved ?? (async () => undefined),
+    })
     this.crepe = new Crepe({
       root: options.root,
       defaultValue: options.initialMarkdown,
@@ -59,6 +81,7 @@ export class OpenMdEditorAdapter {
       },
     })
     this.crepe.editor.config(configureOpenMdCodeBlocks)
+    this.crepe.editor.config(this.imageFeature.configureUpload)
     this.crepe.editor.config((ctx) => {
       ctx.update(remarkStringifyOptionsCtx, (options) => ({
         ...options,
@@ -75,6 +98,7 @@ export class OpenMdEditorAdapter {
     this.crepe.editor.use(blockSourcePlugin)
     this.crepe.editor.use(listEditingPlugin)
     this.crepe.editor.use(openMdTablePlugins)
+    this.crepe.editor.use(this.imageFeature.plugins)
 
     this.crepe.setReadonly(options.readOnly).on((listener) => {
       listener.markdownUpdated((ctx, markdown) => {
@@ -170,6 +194,15 @@ export class OpenMdEditorAdapter {
   focus(): void {
     if (this.destroyed || !this.created) return
     this.crepe.editor.action((ctx) => ctx.get(editorViewCtx).focus())
+  }
+
+  async insertImageFromPicker(): Promise<void> {
+    if (this.destroyed || !this.created) return
+    await this.imageFeature.insertFromPicker()
+  }
+
+  setDocumentPath(documentPath: string | undefined): void {
+    this.imageFeature.setDocumentPath(documentPath)
   }
 
   async destroy(): Promise<void> {

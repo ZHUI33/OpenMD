@@ -49,6 +49,58 @@ export interface RecentFile {
   lastOpenedAt: number
 }
 
+export type ImageErrorCode =
+  | 'document-not-saved'
+  | 'unauthorized-document'
+  | 'invalid-request'
+  | 'unsupported-image'
+  | 'image-too-large'
+  | 'invalid-path'
+  | 'image-not-found'
+  | 'read-failed'
+  | 'write-failed'
+  | 'unsafe-svg'
+
+export interface ImageOperationError {
+  code: ImageErrorCode
+  message: string
+}
+
+export interface SaveImageRequest {
+  documentPath: string
+  bytes: Uint8Array
+  suggestedName?: string
+}
+
+export interface SelectImageRequest {
+  documentPath: string
+}
+
+export interface SaveImageResult {
+  canceled: boolean
+  relativePath?: string
+  displayUrl?: string
+  error?: ImageOperationError
+}
+
+export interface ResolveImageRequest {
+  documentPath: string
+  source: string
+}
+
+export interface ResolveImageResult {
+  ok: boolean
+  url?: string
+  pathHint?: string
+  error?: ImageOperationError
+}
+
+export interface ImagesApi {
+  saveImage: (request: SaveImageRequest) => Promise<SaveImageResult>
+  selectImage: (request: SelectImageRequest) => Promise<SaveImageResult>
+  resolveImage: (request: ResolveImageRequest) => Promise<ResolveImageResult>
+}
+
 export type CloseIntent = 'window' | 'application'
 
 export interface ResolveCloseRequest {
@@ -80,4 +132,5 @@ export interface DocumentsApi {
 export interface OpenMdApi {
   getAppInfo: () => Promise<AppInfo>
   documents: DocumentsApi
+  images: ImagesApi
 }

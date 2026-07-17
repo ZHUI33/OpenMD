@@ -58,11 +58,16 @@ function App(): JSX.Element {
 
   return (
     <div className="app-shell">
-      <TitleBar />
+      <TitleBar onInsertImage={() => void editorRef.current?.insertImageFromPicker()} />
       <main className="workspace" aria-label="编辑工作区">
         <OpenMdEditor
           ref={editorRef}
           initialMarkdown={useAppStore.getState().document.markdown}
+          documentPath={filePath}
+          imagesApi={window.openmd.images}
+          onEnsureDocumentSaved={() =>
+            controllerRef.current?.ensureDocumentSaved() ?? Promise.resolve(undefined)
+          }
           onChange={updateMarkdown}
         />
       </main>

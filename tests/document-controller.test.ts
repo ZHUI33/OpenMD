@@ -49,6 +49,7 @@ describe('document controller', () => {
       }),
       setReadOnly: vi.fn(),
       focus: vi.fn(),
+      insertImageFromPicker: vi.fn(async () => undefined),
     }
     controller = new DocumentController(api, () => editor)
     setDocument('saved content', 'C:\\notes\\draft.md', editorMarkdown)
@@ -136,5 +137,34 @@ describe('document controller', () => {
       filePath: 'C:\\notes\\draft.md',
       dirty: true,
     })
+  })
+
+  it('returns undefined when saving an untitled document for an image is canceled', async () => {
+    editorMarkdown = 'untitled content'
+    useAppStore.getState().setDocument(editorMarkdown)
+    vi.mocked(api.saveDocument).mockResolvedValue({ canceled: true })
+
+    await expect(controller.ensureDocumentSaved()).resolves.toBeUndefined()
+
+    expect(api.saveDocument).toHaveBeenCalledWith({
+      filePath: undefined,
+      content: 'untitled content',
+      saveAs: false,
+    })
+    expect(useAppStore.getState().document.filePath).toBeUndefined()
+  })
+
+  it('queues concurrent image save requests and returns the saved document path', async () => {
+    editorMarkdown = 'untitled content'
+    useAppStore.getState().setDocument(editorMarkdown)
+    vi.mocked(api.saveDocument).mockResolvedValue({
+      canceled: false,
+      filePath: 'C:\\notes\\saved.md',
+    })
+
+    await expect(
+      Promise.all([controller.ensureDocumentSaved(), controller.ensureDocumentSaved()]),
+    ).resolves.toEqual(['C:\\notes\\saved.md', 'C:\\notes\\saved.md'])
+    expect(api.saveDocument).toHaveBeenCalledOnce()
   })
 })

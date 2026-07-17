@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow } from 'electron'
 
 import { DocumentService } from './document-service'
+import { ImageService } from './image-service'
 import { registerIpcHandlers } from './ipc'
 import { installApplicationMenu } from './menu'
 import { RecentFilesStore } from './recent-files'
@@ -18,8 +19,9 @@ void app.whenReady().then(() => {
     installApplicationMenu(recentFiles, sendDocumentCommand)
   }
   const documentService = new DocumentService(recentFilesStore, updateMenu)
+  const imageService = new ImageService(documentService)
 
-  registerIpcHandlers(documentService)
+  registerIpcHandlers(documentService, imageService)
   createMainWindow()
   updateMenu([])
   void recentFilesStore
