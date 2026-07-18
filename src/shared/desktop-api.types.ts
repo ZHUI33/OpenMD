@@ -7,6 +7,34 @@ export interface AppInfo {
   platform: string
 }
 
+export type HtmlImageStrategy = 'relative' | 'base64'
+export type PdfPageSize = 'A4' | 'Letter'
+
+export interface ExportHtmlRequest {
+  documentHtml: string
+  documentPath?: string
+  title: string
+}
+
+export interface PdfMargins {
+  top: number
+  right: number
+  bottom: number
+  left: number
+}
+
+export interface ExportPdfRequest extends ExportHtmlRequest {
+  pageSize: PdfPageSize
+  margins: PdfMargins
+  printBackground: boolean
+}
+
+export interface ExportDocumentResult {
+  canceled: boolean
+  filePath?: string
+  error?: string
+}
+
 export interface OpenDocumentRequest {
   filePath?: string
 }
@@ -226,6 +254,8 @@ export type DocumentCommand =
   | { type: 'open-recent'; filePath: string }
   | { type: 'save' }
   | { type: 'save-as' }
+  | { type: 'export-html' }
+  | { type: 'export-pdf' }
   | { type: 'reload' }
   | { type: 'close'; intent: CloseIntent; requestId: string }
 
@@ -256,4 +286,8 @@ export interface OpenMdApi {
   images: ImagesApi
   workspace: WorkspaceApi
   settings: SettingsApi
+  exports: {
+    html: (request: ExportHtmlRequest) => Promise<ExportDocumentResult>
+    pdf: (request: ExportPdfRequest) => Promise<ExportDocumentResult>
+  }
 }

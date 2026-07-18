@@ -27,6 +27,7 @@ export function installApplicationMenu(
   const isMac = process.platform === 'darwin'
   const fileSubmenu: MenuItemConstructorOptions[] = [
     {
+      id: 'openmd-document-new',
       label: '新建',
       accelerator: 'CmdOrCtrl+N',
       click: () => sendCommand({ type: 'new' }),
@@ -47,6 +48,7 @@ export function installApplicationMenu(
     },
     { type: 'separator' },
     {
+      id: 'openmd-document-save',
       label: '保存',
       accelerator: 'CmdOrCtrl+S',
       click: () => sendCommand({ type: 'save' }),
@@ -55,6 +57,17 @@ export function installApplicationMenu(
       label: '另存为…',
       accelerator: 'CmdOrCtrl+Shift+S',
       click: () => sendCommand({ type: 'save-as' }),
+    },
+    { type: 'separator' },
+    {
+      label: '导出 HTML…',
+      accelerator: 'CmdOrCtrl+Alt+H',
+      click: () => sendCommand({ type: 'export-html' }),
+    },
+    {
+      label: '导出 PDF…',
+      accelerator: 'CmdOrCtrl+Alt+P',
+      click: () => sendCommand({ type: 'export-pdf' }),
     },
   ]
 
@@ -112,6 +125,7 @@ export function installApplicationMenu(
       label: '视图',
       submenu: [
         {
+          id: 'openmd-toggle-editor-mode',
           label: '切换编辑模式',
           accelerator: 'CmdOrCtrl+/',
           click: () => sendCommand({ type: 'toggle-editor-mode' }),

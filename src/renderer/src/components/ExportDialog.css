@@ -1,0 +1,133 @@
+.export-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: rgb(20 22 25 / 42%);
+  backdrop-filter: blur(3px);
+}
+
+.export-dialog {
+  width: min(520px, 100%);
+  padding: 24px;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface-elevated);
+  box-shadow: 0 22px 70px rgb(0 0 0 / 24%);
+}
+
+.export-dialog header,
+.export-dialog footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.export-dialog h2,
+.export-dialog p {
+  margin: 0;
+}
+
+.export-dialog__eyebrow {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.export-dialog header > button {
+  width: 34px;
+  height: 34px;
+  border: 0;
+  border-radius: 7px;
+  color: var(--muted);
+  background: transparent;
+  font-size: 24px;
+}
+
+.export-dialog__field {
+  display: grid;
+  gap: 7px;
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.export-dialog input[type='text'],
+.export-dialog input:not([type]),
+.export-dialog input[type='number'],
+.export-dialog select {
+  min-height: 38px;
+  padding: 7px 10px;
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  font: inherit;
+}
+
+.export-dialog fieldset {
+  display: grid;
+  gap: 10px;
+  margin: 20px 0 0;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+}
+
+.export-dialog fieldset label,
+.export-dialog__check {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.export-dialog__pdf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.export-dialog__check {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+
+.export-dialog__hint {
+  margin-top: 18px !important;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.export-dialog__error {
+  margin-top: 10px !important;
+  color: var(--danger, #b42318);
+  font-size: 13px;
+}
+
+.export-dialog footer {
+  justify-content: flex-end;
+  margin-top: 22px;
+}
+
+.export-dialog footer button {
+  min-height: 36px;
+  padding: 7px 14px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  color: var(--foreground);
+  background: var(--surface-subtle);
+}
+
+.export-dialog footer .primary {
+  color: #fff;
+  border-color: var(--primary);
+  background: var(--primary);
+}

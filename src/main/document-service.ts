@@ -251,14 +251,20 @@ export class DocumentService {
     }
 
     if (!filePath) {
-      const selection = await dialog.showSaveDialog(parentWindow, {
-        title: request.saveAs ? '另存为' : '保存 Markdown 文件',
-        defaultPath: request.filePath ?? '未命名.md',
-        filters: DOCUMENT_FILTERS,
-      })
+      const e2eSavePath =
+        process.env.OPENMD_E2E === '1' ? process.env.OPENMD_E2E_SAVE_PATH : undefined
+      if (e2eSavePath) {
+        filePath = withDefaultMarkdownExtension(resolve(e2eSavePath))
+      } else {
+        const selection = await dialog.showSaveDialog(parentWindow, {
+          title: request.saveAs ? '另存为' : '保存 Markdown 文件',
+          defaultPath: request.filePath ?? '未命名.md',
+          filters: DOCUMENT_FILTERS,
+        })
 
-      if (selection.canceled || !selection.filePath) return { canceled: true }
-      filePath = withDefaultMarkdownExtension(selection.filePath)
+        if (selection.canceled || !selection.filePath) return { canceled: true }
+        filePath = withDefaultMarkdownExtension(selection.filePath)
+      }
     }
 
     if (!isSupportedDocumentPath(filePath)) {
@@ -296,6 +302,11 @@ export class DocumentService {
     request: ConfirmCloseRequest,
   ): Promise<ConfirmCloseResult> {
     const documentName = getFileNameFromPath(request.filePath) ?? '未命名文档'
+    if (process.env.OPENMD_E2E === '1' && process.env.OPENMD_E2E_CLOSE_RESPONSE) {
+      const response = process.env.OPENMD_E2E_CLOSE_RESPONSE
+      if (response === 'discard') return { action: 'discard' }
+      if (response === 'cancel') return { action: 'cancel' }
+    }
     const confirmation = await dialog.showMessageBox(parentWindow, {
       type: 'warning',
       title: '未保存的修改',

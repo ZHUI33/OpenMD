@@ -1,188 +1,136 @@
 # OpenMD
 
-OpenMD 是一个开源、跨平台的 Markdown 桌面编辑器。项目目标是提供类似 Typora
-的沉浸式正文编辑体验：Markdown 在正文中直接编辑并实时呈现，不采用源码与预览左右分栏。
+OpenMD 是一个开源、跨平台的 Markdown 桌面编辑器。它以所见即所得正文编辑为默认体验，
+同时提供可切换的源码模式；不会把界面改成左右分栏预览。
 
-当前仓库已完成阶段 4：除本地 Markdown 文档的新建、打开、保存、未保存修改确认和最近
-文件外，正文编辑器现已支持 GFM 表格、CodeMirror 6 围栏代码块、行内代码、常用列表
-行为、任务复选框和轻量插入菜单。当前仍保持单文档模式，不包含多标签页或文件夹工作区。
+![OpenMD 应用图标](resources/icon.png)
 
-## 当前技术栈
+> 功能截图占位：首个公开发布候选版完成 Windows/macOS 人工验收后，在此补充编辑器、工作区和导出对话框截图。
 
-- Electron 43
-- React 19
-- TypeScript 5.8
-- Vite 7 与 electron-vite 4
-- Zustand 5
-- Milkdown/Crepe 7 与 CodeMirror 6
-- pnpm 10
-- electron-builder 26
-- Vitest 3
-- ESLint 9
-- Prettier 3
+## 功能清单
 
-所有依赖都使用精确版本，并由 pnpm-lock.yaml 锁定。
+- 所见即所得 Markdown 编辑（默认）与单独源码模式
+- 多标签页、最近文件和文件夹工作区
+- 标题、列表、任务列表、引用、GFM 表格和目录
+- CodeMirror 代码块与语法高亮
+- 本地/远程图片、KaTeX 公式和安全的 Mermaid 预览
+- 可配置自动保存：默认延迟 1500 ms，仅保存已有路径的文档
+- 独立 HTML 导出：相对资源或本地图片 Base64，包含表格、高亮、KaTeX 和 Mermaid
+- A4/Letter 正文 PDF 导出：页边距、背景和浅色打印主题
+- Windows NSIS 与 macOS DMG；关联 `.md` 和 `.markdown`
+- 可关闭的 GitHub Releases 更新检查，不静默下载或强制安装
 
-## 开发环境要求
+OpenMD MVP 不包含账号、云同步、在线协作或 AI 功能。
 
-- Node.js 22.12 或更高版本（推荐使用 Node.js 24 LTS）
-- pnpm 10 或更高版本
-- Windows 10/11 或受支持的 macOS 版本
+## 技术架构
 
-建议通过 Corepack 启用项目声明的 pnpm 版本：
+- Electron 43、React 19、TypeScript 5.8、Vite 7、electron-vite 4
+- Milkdown/Crepe 7、CodeMirror 6、Zustand 5
+- Markdown-it、Highlight.js、KaTeX、Mermaid、DOMPurify
+- electron-builder 26、electron-updater 6
+- Vitest、React Testing Library、Playwright Electron
 
-    corepack enable
-    corepack install
+桌面权限只经过下面的白名单调用链：
 
-## 安装与启动
+    Renderer → contextBridge/Preload → validated IPC → Main Process
 
-安装依赖：
+Renderer 没有 Node.js 或 Electron 直接访问能力。主窗口启用 `contextIsolation`、`sandbox` 和
+`webSecurity`，禁用 `nodeIntegration`。HTML 导出先在 Renderer 中安全渲染，再由主进程写入；
+PDF 使用独立的隐藏沙箱窗口，只加载导出的正文 HTML。
 
-    pnpm install
+## 开发方式
 
-启动 Vite 开发服务和 Electron 桌面窗口：
+要求 Node.js 22.12+ 和 pnpm 10+。推荐通过 Corepack 使用仓库声明的 pnpm 版本：
 
-    pnpm dev
+```bash
+corepack enable
+pnpm install --frozen-lockfile
+pnpm dev
+```
 
-## 检查与构建
+常用检查：
 
-    pnpm typecheck
-    pnpm lint
-    pnpm test
-    pnpm build
+```bash
+pnpm lint
+pnpm typecheck
+pnpm test:unit
+pnpm build
+pnpm test:e2e
+```
 
-构建 Windows 安装包：
+Electron E2E 会创建独立系统临时目录，并把 `userData`、Markdown、图片和导出文件全部定向到该目录；
+结束时清理，不读取或写入用户真实文档。
 
-    pnpm dist:win
+## 构建方式
 
-在 macOS 上构建未签名的 DMG：
+```bash
+# 当前平台的生产代码
+pnpm build
 
-    pnpm dist:mac
+# 必须在 Windows 上运行，生成 x64 NSIS
+pnpm dist:win
 
-## 安全架构
+# 必须在 macOS 上运行，生成 x64 与 arm64 DMG
+pnpm dist:mac
+```
 
-渲染进程不启用 Node.js 集成，也不能直接使用 fs、path 或 Electron 主进程 API。
-BrowserWindow 启用了 contextIsolation 与 sandbox。需要桌面能力时，调用链固定为：
+产物写入 `dist/`：
 
-    Renderer → Preload 白名单 API → IPC → Main Process
+- `OpenMD-<version>-x64-setup.exe`
+- `OpenMD-<version>-x64.dmg`
+- `OpenMD-<version>-arm64.dmg`
+- GitHub 更新元数据与 blockmap（发布构建时）
 
-Preload 只公开 `window.openmd` 中声明的强类型白名单能力，不公开 `ipcRenderer` 本身。
+### Windows 安装
 
-## 项目目录
+运行 NSIS 安装包，选择安装目录。安装器创建开始菜单快捷方式和桌面快捷方式，并注册 `.md`、
+`.markdown` 文件关联。未配置代码签名的测试包可能触发 SmartScreen；公开发布前应完成真实证书签名。
 
-    OpenMD/
-    ├─ src/
-    │  ├─ main/             Electron 主进程、窗口与 IPC 注册
-    │  ├─ preload/          受限的桌面 API 桥接层
-    │  ├─ renderer/         React 页面、组件、状态与样式
-    │  └─ shared/           IPC 通道名与跨进程类型
-    ├─ resources/           electron-builder 构建资源
-    ├─ tests/               Vitest 测试
-    ├─ electron-builder.yml
-    ├─ electron.vite.config.ts
-    ├─ package.json
-    ├─ tsconfig.json
-    └─ README.md
+### macOS 安装
 
-## 人工验收
+选择与 CPU 对应的 DMG（Apple Silicon 使用 arm64，Intel 使用 x64），把 OpenMD 拖入
+Applications。未签名测试包需要在“系统设置 → 隐私与安全性”中确认打开；不要把这种包当作正式发布包。
+签名、公证和所需 Secrets 见 [发布指南](docs/RELEASING.md)。
 
-### 1. 安装与自动检查
+## 自动保存与导出
 
-在项目根目录依次执行：
+自动保存只处理已经授权且具有文件路径的 dirty 标签页。每个文档拥有独立串行队列：延迟到期后读取
+最新 Markdown；同一文档不会并发写入，不同文档可以并行。失败时 dirty 状态不清除并显示错误；退出
+确认前等待已开始的保存结束。未命名文档永远不会由自动保存静默选择路径。
 
-    pnpm install --frozen-lockfile
-    pnpm typecheck
-    pnpm lint
-    pnpm test
-    pnpm build
+独立 HTML 禁用原始 Markdown HTML，清洗正文与 Mermaid SVG，并通过 CSP 禁止脚本。Base64 模式嵌入
+已授权的本地图片；远程 HTTP(S) 图片仍保留为远程引用。PDF 复用同一静态正文，使用浅色打印 CSS，
+避免代码块、表格行、公式和图表出现不合理分页。
 
-预期所有命令以退出码 0 结束。
-构建后应存在 out/main/index.js、out/preload/index.js 和 out/renderer/index.html。
+## GitHub Actions
 
-### 2. 新建、打开与保存
+- Pull Request：`lint → typecheck → unit/component tests → build`
+- `v*` 标签：Windows runner 构建 x64 NSIS；macOS runner 构建 x64/arm64 DMG
+- 两个平台上传 Actions artifacts，并把文件附加到草稿 GitHub Release
+- 未配置签名 Secrets 时生成未签名测试包；仓库不保存证书、密码或 Token
 
-执行：
+## 路线图
 
-    pnpm dev
+- 0.1.x：修复 MVP 回归、提升可访问性和大文档性能
+- 发布准备：Windows/macOS 真实签名、公证、安装与文件关联矩阵验证
+- 后续版本：导出模板、打印页眉页脚和更多主题兼容性
 
-在打开的桌面窗口中依次确认：
+账号、云同步、在线协作和 AI 不在当前路线图范围内。
 
-- 按 Ctrl/Cmd+N 后正文为空，标题为“未命名 - OpenMD”。
-- 输入内容后标题前出现 `●`。
-- 按 Ctrl/Cmd+S，未命名文档会打开保存对话框；不填写扩展名时自动使用 `.md`。
-- 再次编辑后按 Ctrl/Cmd+S 会直接写回当前文件，保存成功后 `●` 消失。
-- 按 Ctrl/Cmd+Shift+S 可以另存为并更新标题中的文件名。
-- 按 Ctrl/Cmd+O 只能选择 `.md`、`.markdown` 或 `.txt`，打开后内容与 UTF-8 原文件一致。
+## 贡献
 
-### 3. 未保存确认
+请先阅读 [CONTRIBUTING.md](CONTRIBUTING.md)、[CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+和 [SECURITY.md](SECURITY.md)。提交 PR 前至少运行 `pnpm lint && pnpm typecheck && pnpm test:unit && pnpm build`。
 
-- 修改正文后执行新建、打开、重新加载、关闭窗口或退出应用。
-- 确认对话框包含“保存”“不保存”“取消”。
-- “保存”仅在写入成功后继续原操作；“不保存”直接继续；“取消”保留当前文档。
-- 将目标目录改为不可写后重试保存，确认出现可理解的错误且文档仍显示为已修改。
+## 已知限制
 
-### 4. 最近文件与菜单
+- 当前发布包默认未签名；正式发布需要维护者配置平台证书和 Apple 公证。
+- Base64 HTML 导出只嵌入本地已授权图片，不主动下载远程图片。
+- PDF 中的远程图片受网络可用性影响。
+- 自动更新以 GitHub Releases 为源；开发环境、禁用设置或缺少发布元数据时不会检查。
+- 更新检查支持确认下载和确认安装，但暂不提供增量下载进度 UI。
+- E2E 对系统原生文件对话框使用临时路径注入，安装器 UI、SmartScreen 和 Gatekeeper 仍需人工验收。
 
-- 成功打开或保存多个文件后，检查“文件 → 最近打开”，最近使用的文件应位于最前。
-- 同一文件不会重复，列表最多 10 条；删除磁盘上的文件后，重新启动、执行其他文件操作或点击该项会自动清理。
-- 检查“编辑”和“视图”菜单中的撤销、重做、剪贴板、缩放、重新加载和开发者工具命令。
-- macOS 上退出命令位于标准应用菜单中。
+## 许可证
 
-### 5. DevTools 与渲染进程隔离
-
-在 Windows/Linux 按 Ctrl+Shift+I，在 macOS 按 Command+Option+I 打开 DevTools。
-确认 Console 没有红色运行时错误，然后依次执行：
-
-    typeof process
-    typeof require
-    typeof Buffer
-    typeof ipcRenderer
-    typeof electron
-    Object.keys(window.openmd)
-    Object.keys(window.openmd.documents)
-    await window.openmd.getAppInfo()
-
-前五项都应返回 "undefined"。`window.openmd` 只应包含应用信息与受限文档 API，最后一项应返回
-应用名称、版本和当前平台。再检查 src/main/window.ts 中的 BrowserWindow 配置：
-
-    nodeIntegration: false
-    contextIsolation: true
-    sandbox: true
-
-### 6. 阶段 4 正文编辑
-
-- 使用浮动 `+` 按钮或在空段落输入 `/`，确认可插入标题、引用、三类列表、表格、代码块
-  和分割线，菜单中没有图片或数学公式。
-- 插入表格并直接编辑单元格；用 Tab/Shift+Tab 前后移动，确认最后一格 Tab 会新增一行。
-- 通过表格悬浮按钮或右键菜单增删行列、设置列对齐，并删除整张表；保存后检查磁盘内容仍是
-  `| ... |` 形式的 GFM Markdown。
-- 插入代码块，依次选择 JavaScript、TypeScript、Java、Python 等语言，确认高亮、复制、
-  Tab 缩进、多行选择、撤销/重做正常；保存后确认围栏语言仍为小写标准标识。
-- 检查有序、无序和任务列表的 Enter、空项退出、Tab/Shift+Tab 层级调整；点击任务复选框
-  后保存，确认磁盘内容在 `[ ]` 与 `[x]` 之间同步。
-- 在正文、表格单元格和代码块中分别使用中文输入法连续输入，确认候选上屏期间没有重复字符、
-  意外提交或光标跳动。
-- 打开包含标题、链接、嵌套列表、任务项、表格、行内代码和围栏代码的外部 `.md` 文件，
-  编辑后保存并重新打开，确认正文语义完整且未出现 HTML 表格或 OpenMD 私有标记。
-
-### 7. 阶段边界
-
-确认应用仍是单文档所见即所得编辑器，没有多标签页、文件夹工作区、自动保存、导出或同步入口。
-完成检查后，在运行 pnpm dev 的终端按 Ctrl+C 结束开发进程。
-
-### 8. 平台打包
-
-在 Windows 上执行：
-
-    pnpm dist:win
-
-预期生成 dist/OpenMD-0.1.0-x64-setup.exe。在 macOS 上执行：
-
-    pnpm dist:mac
-
-预期生成未签名的 DMG；阶段 1 不要求配置 Apple 签名或公证。
-
-## 当前阶段边界
-
-阶段 4 仍只实现单文档 Markdown 编辑。本阶段不包含图片、数学公式、Mermaid、多标签页、
-文件夹工作区、自动保存、导出、同步或云端能力。
+[MIT](LICENSE) © OpenMD contributors.

@@ -1,4 +1,4 @@
-export const SETTINGS_SCHEMA_VERSION = 2
+export const SETTINGS_SCHEMA_VERSION = 3
 
 export const BUILT_IN_THEMES = ['system', 'light', 'dark'] as const
 export const EDITOR_MODES = ['visual', 'source'] as const
@@ -15,12 +15,18 @@ export type ThemeSelection = BuiltInTheme | UserThemeId
 export type DefaultEditorMode = (typeof EDITOR_MODES)[number]
 export type ImageAssetDirectoryRule = (typeof IMAGE_ASSET_DIRECTORY_RULES)[number]
 
+export interface AutoSaveSettings {
+  enabled: boolean
+  delayMs: number
+}
+
 export interface AppSettings {
   schemaVersion: typeof SETTINGS_SCHEMA_VERSION
   theme: ThemeSelection
   defaultEditorMode: DefaultEditorMode
   autoSave: boolean
   autoSaveDelayMs: number
+  autoUpdate: boolean
   editorFontFamily: string
   editorFontSizePx: number
   editorLineHeight: number
@@ -46,7 +52,8 @@ export const DEFAULT_SETTINGS: Readonly<AppSettings> = Object.freeze({
   theme: 'system',
   defaultEditorMode: 'visual',
   autoSave: false,
-  autoSaveDelayMs: 1_200,
+  autoSaveDelayMs: 1_500,
+  autoUpdate: true,
   editorFontFamily:
     "Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif",
   editorFontSizePx: 17,
@@ -64,6 +71,7 @@ const SETTINGS_KEYS = new Set<string>([
   'defaultEditorMode',
   'autoSave',
   'autoSaveDelayMs',
+  'autoUpdate',
   'editorFontFamily',
   'editorFontSizePx',
   'editorLineHeight',
@@ -156,6 +164,7 @@ export function migrateSettings(value: unknown): AppSettings {
   const defaultEditorModeValue = source.defaultEditorMode ?? source.editorMode
   const autoSaveValue = source.autoSave ?? source.autoSaveEnabled
   const autoSaveDelayValue = source.autoSaveDelayMs ?? source.autoSaveDelay
+  const autoUpdateValue = source.autoUpdate ?? source.checkForUpdatesAutomatically
   const fontFamilyValue = source.editorFontFamily ?? source.fontFamily ?? source.font
   const fontSizeValue = source.editorFontSizePx ?? source.fontSize
   const lineHeightValue = source.editorLineHeight ?? source.lineHeight
@@ -178,6 +187,8 @@ export function migrateSettings(value: unknown): AppSettings {
       DEFAULT_SETTINGS.autoSaveDelayMs,
       SETTINGS_LIMITS.autoSaveDelayMs,
     ),
+    autoUpdate:
+      typeof autoUpdateValue === 'boolean' ? autoUpdateValue : DEFAULT_SETTINGS.autoUpdate,
     editorFontFamily: safeFontFamily(fontFamilyValue, DEFAULT_SETTINGS.editorFontFamily),
     editorFontSizePx: clampNumber(
       fontSizeValue,
@@ -250,6 +261,7 @@ export function parseSettingsUpdate(value: unknown): AppSettingsUpdate {
   }
   for (const field of [
     'autoSave',
+    'autoUpdate',
     'sourceLineNumbers',
     'sourceLineWrapping',
     'showTextFiles',
@@ -305,6 +317,12 @@ export function parseSettingsUpdate(value: unknown): AppSettingsUpdate {
   }
 
   return update
+}
+
+export function getAutoSaveSettings(
+  settings: Pick<AppSettings, 'autoSave' | 'autoSaveDelayMs'>,
+): AutoSaveSettings {
+  return { enabled: settings.autoSave, delayMs: settings.autoSaveDelayMs }
 }
 
 export function applySettingsUpdate(current: Readonly<AppSettings>, value: unknown): AppSettings {

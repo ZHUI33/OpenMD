@@ -1,6 +1,7 @@
-appId: io.openmd.desktop
+appId: io.openmd.app
 productName: OpenMD
 asar: true
+copyright: Copyright © OpenMD contributors
 
 directories:
   buildResources: resources
@@ -11,16 +12,44 @@ files:
   - package.json
 
 win:
+  icon: resources/icon.png
   target:
-    - nsis
+    - target: nsis
+      arch:
+        - x64
   artifactName: '${productName}-${version}-${arch}-setup.${ext}'
 
 mac:
+  icon: resources/icon.png
   category: public.app-category.productivity
   target:
-    - dmg
+    - target: dmg
+      arch:
+        - x64
+        - arm64
   artifactName: '${productName}-${version}-${arch}.${ext}'
 
 nsis:
   oneClick: false
   allowToChangeInstallationDirectory: true
+  createStartMenuShortcut: true
+  createDesktopShortcut: true
+  shortcutName: OpenMD
+
+fileAssociations:
+  - ext: md
+    name: Markdown Document
+    description: Markdown document
+    role: Editor
+    icon: resources/icon.png
+  - ext: markdown
+    name: Markdown Document
+    description: Markdown document
+    role: Editor
+    icon: resources/icon.png
+
+publish:
+  provider: github
+  owner: ZHUI33
+  repo: OpenMD
+  releaseType: draft

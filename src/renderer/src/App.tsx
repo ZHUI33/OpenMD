@@ -2,15 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
 
 import type {
+  HtmlImageStrategy,
   RendererCommand,
   WorkspaceEntry,
   WorkspaceFileChange,
   WorkspaceInfo,
   WorkspaceSearchMatch,
 } from '../../shared/desktop-api.types'
-import { DEFAULT_SETTINGS } from '../../shared/settings'
+import { DEFAULT_SETTINGS, getAutoSaveSettings } from '../../shared/settings'
 import type { AppSettings, AppSettingsUpdate, BuiltInTheme } from '../../shared/settings'
 import { FileConflictDialog } from './components/FileConflictDialog'
+import { ExportDialog } from './components/ExportDialog'
+import type { PdfExportOptions } from './components/ExportDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { StatusBar } from './components/StatusBar'
 import { TabBar } from './components/TabBar'
@@ -20,11 +23,13 @@ import { WorkspaceSidebar } from './components/WorkspaceSidebar'
 import { OpenMdEditor } from './editor/OpenMdEditor'
 import type { OpenMdEditorHandle, ResolvedTheme } from './editor/editor.types'
 import { resolveExternalFileChange } from './external-file-state'
+import { buildStandaloneHtml } from './export-document'
 import { getRendererSettingsApi } from './settings/settings-api'
 import { getApplicationThemeController } from './settings/theme-controller'
 import { useAppStore } from './stores/app-store'
 import { normalizeEditorTabPath, useEditorTabsStore } from './stores/editor-tabs-store'
 import type { CloseTabsScope, EditorTab } from './stores/editor-tabs-store'
+import { DocumentSaveQueue } from './document-save-queue'
 
 interface FileConflictState {
   tabId: string
@@ -79,7 +84,7 @@ function App(): JSX.Element {
   const activeTabIdRef = useRef(activeTabId)
   const displayGenerationRef = useRef(0)
   const workspaceNavigationRef = useRef(0)
-  const savingTabIdsRef = useRef(new Set<string>())
+  const saveQueueRef = useRef(new DocumentSaveQueue())
   const autoSaveTimersRef = useRef(new Map<string, { timer: number; signature: string }>())
   const toastSequenceRef = useRef(0)
   const commandHandlerRef = useRef<(command: RendererCommand) => Promise<void>>(
@@ -89,6 +94,7 @@ function App(): JSX.Element {
   const settingsApi = useMemo(() => getRendererSettingsApi(), [])
   const themeController = useMemo(() => getApplicationThemeController(settingsApi), [settingsApi])
   const [settings, setSettings] = useState<AppSettings>({ ...DEFAULT_SETTINGS })
+  const autoSaveSettings = getAutoSaveSettings(settings)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [settingsReady, setSettingsReady] = useState(false)
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('light')
@@ -97,6 +103,9 @@ function App(): JSX.Element {
   const [conflicts, setConflicts] = useState<Record<string, FileConflictState>>({})
   const [deletedTabIds, setDeletedTabIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<ToastState>()
+  const [exportMode, setExportMode] = useState<'html' | 'pdf'>()
+  const [exportBusy, setExportBusy] = useState(false)
+  const [exportError, setExportError] = useState<string>()
 
   activeTabIdRef.current = activeTabId
 
@@ -325,75 +334,78 @@ function App(): JSX.Element {
 
   const saveTab = useCallback(
     async (tabId: string, saveAs: boolean, silent = false): Promise<boolean> => {
-      if (savingTabIdsRef.current.has(tabId)) return false
-      if (tabId === activeTabIdRef.current) captureActiveEditor()
-      const store = useEditorTabsStore.getState()
-      const tab = store.tabs.find((candidate) => candidate.id === tabId)
-      if (!tab) return false
+      return saveQueueRef.current.run(tabId, async () => {
+        if (tabId === activeTabIdRef.current) captureActiveEditor()
+        const store = useEditorTabsStore.getState()
+        const tab = store.tabs.find((candidate) => candidate.id === tabId)
+        if (!tab) return false
+        if (!saveAs && !tab.dirty) return true
+        if (silent && !tab.filePath) return false
 
-      savingTabIdsRef.current.add(tabId)
-      const submittedMarkdown = tab.markdown
-      try {
-        const result = await window.openmd.documents.saveDocument({
-          filePath: tab.filePath,
-          content: submittedMarkdown,
-          saveAs,
-          forbiddenFilePaths: store.tabs
-            .filter((candidate) => candidate.id !== tab.id && candidate.filePath)
-            .map((candidate) => candidate.filePath!),
-        })
-        if (result.canceled) return false
-        if (result.error || !result.filePath) {
-          if (!silent) showToast('保存文件失败。', 'error')
+        const submittedMarkdown = tab.markdown
+        try {
+          const result = await window.openmd.documents.saveDocument({
+            filePath: tab.filePath,
+            content: submittedMarkdown,
+            saveAs,
+            forbiddenFilePaths: store.tabs
+              .filter((candidate) => candidate.id !== tab.id && candidate.filePath)
+              .map((candidate) => candidate.filePath!),
+          })
+          if (result.canceled) return false
+          if (result.error || !result.filePath) {
+            showToast('保存文件失败，文档仍标记为未保存。', 'error')
+            return false
+          }
+
+          const saved = useEditorTabsStore.getState().markTabSaved(tabId, {
+            filePath: result.filePath,
+            markdown: submittedMarkdown,
+          })
+          if (!saved.saved) {
+            showToast('该路径已经在另一个标签中打开，无法创建重复标签。', 'error')
+            return false
+          }
+          useEditorTabsStore
+            .getState()
+            .updateTabFilePath(tabId, result.filePath, fileNameFromPath(result.filePath))
+          if (
+            tab.filePath &&
+            normalizeEditorTabPath(tab.filePath) !== normalizeEditorTabPath(result.filePath)
+          ) {
+            await window.openmd.documents
+              .releaseDocument({ filePath: tab.filePath })
+              .catch(() => undefined)
+            relativePathByTabIdRef.current.delete(tabId)
+          }
+          setDeletedTabIds((current) => {
+            const next = new Set(current)
+            next.delete(tabId)
+            return next
+          })
+          setConflicts((current) => {
+            const next = { ...current }
+            delete next[tabId]
+            return next
+          })
+          if (!silent) showToast(`已保存 ${fileNameFromPath(result.filePath)}`)
+          return true
+        } catch (error) {
+          showToast(
+            error instanceof Error ? error.message : '保存文件失败，文档仍标记为未保存。',
+            'error',
+          )
           return false
         }
-
-        const saved = useEditorTabsStore.getState().markTabSaved(tabId, {
-          filePath: result.filePath,
-          markdown: submittedMarkdown,
-        })
-        if (!saved.saved) {
-          showToast('该路径已经在另一个标签中打开，无法创建重复标签。', 'error')
-          return false
-        }
-        useEditorTabsStore
-          .getState()
-          .updateTabFilePath(tabId, result.filePath, fileNameFromPath(result.filePath))
-        if (
-          tab.filePath &&
-          normalizeEditorTabPath(tab.filePath) !== normalizeEditorTabPath(result.filePath)
-        ) {
-          await window.openmd.documents
-            .releaseDocument({ filePath: tab.filePath })
-            .catch(() => undefined)
-          relativePathByTabIdRef.current.delete(tabId)
-        }
-        setDeletedTabIds((current) => {
-          const next = new Set(current)
-          next.delete(tabId)
-          return next
-        })
-        setConflicts((current) => {
-          const next = { ...current }
-          delete next[tabId]
-          return next
-        })
-        if (!silent) showToast(`已保存 ${fileNameFromPath(result.filePath)}`)
-        return true
-      } catch (error) {
-        if (!silent) {
-          showToast(error instanceof Error ? error.message : '保存文件失败。', 'error')
-        }
-        return false
-      } finally {
-        savingTabIdsRef.current.delete(tabId)
-      }
+      })
     },
     [captureActiveEditor, showToast],
   )
 
   const confirmTabs = useCallback(
     async (candidates: readonly EditorTab[]): Promise<boolean> => {
+      captureActiveEditor()
+      await Promise.all(candidates.map((candidate) => saveQueueRef.current.whenIdle(candidate.id)))
       captureActiveEditor()
       for (const candidate of candidates) {
         const current = useEditorTabsStore.getState().tabs.find((tab) => tab.id === candidate.id)
@@ -451,6 +463,96 @@ function App(): JSX.Element {
       return true
     },
     [captureActiveEditor, conflicts, deletedTabIds],
+  )
+
+  const openExportDialog = useCallback(
+    (mode: 'html' | 'pdf'): void => {
+      captureActiveEditor()
+      setExportError(undefined)
+      setExportMode(mode)
+    },
+    [captureActiveEditor],
+  )
+
+  const exportHtml = useCallback(
+    async (title: string, imageStrategy: HtmlImageStrategy): Promise<void> => {
+      captureActiveEditor()
+      const tab = useEditorTabsStore
+        .getState()
+        .tabs.find((candidate) => candidate.id === activeTabIdRef.current)
+      if (!tab) return
+      setExportBusy(true)
+      setExportError(undefined)
+      try {
+        const documentHtml = await buildStandaloneHtml({
+          markdown: tab.markdown,
+          title,
+          documentPath: tab.filePath,
+          imageStrategy,
+          imagesApi: window.openmd.images,
+        })
+        const result = await window.openmd.exports.html({
+          documentHtml,
+          documentPath: tab.filePath,
+          title,
+        })
+        if (result.error) throw new Error(result.error)
+        if (!result.canceled && result.filePath) {
+          setExportMode(undefined)
+          showToast(`已导出 ${fileNameFromPath(result.filePath)}`)
+        }
+      } catch (error) {
+        setExportError(error instanceof Error ? error.message : 'HTML 导出失败。')
+      } finally {
+        setExportBusy(false)
+      }
+    },
+    [captureActiveEditor, showToast],
+  )
+
+  const exportPdf = useCallback(
+    async (title: string, options: PdfExportOptions): Promise<void> => {
+      captureActiveEditor()
+      const tab = useEditorTabsStore
+        .getState()
+        .tabs.find((candidate) => candidate.id === activeTabIdRef.current)
+      if (!tab) return
+      setExportBusy(true)
+      setExportError(undefined)
+      try {
+        const documentHtml = await buildStandaloneHtml({
+          markdown: tab.markdown,
+          title,
+          documentPath: tab.filePath,
+          imageStrategy: 'base64',
+          imagesApi: window.openmd.images,
+        })
+        const marginInches = Math.max(0, Math.min(50, options.marginMm)) / 25.4
+        const result = await window.openmd.exports.pdf({
+          documentHtml,
+          documentPath: tab.filePath,
+          title,
+          pageSize: options.pageSize,
+          margins: {
+            top: marginInches,
+            right: marginInches,
+            bottom: marginInches,
+            left: marginInches,
+          },
+          printBackground: options.printBackground,
+        })
+        if (result.error) throw new Error(result.error)
+        if (!result.canceled && result.filePath) {
+          setExportMode(undefined)
+          showToast(`已导出 ${fileNameFromPath(result.filePath)}`)
+        }
+      } catch (error) {
+        setExportError(error instanceof Error ? error.message : 'PDF 导出失败。')
+      } finally {
+        setExportBusy(false)
+      }
+    },
+    [captureActiveEditor, showToast],
   )
 
   const closeTabs = useCallback(
@@ -700,7 +802,7 @@ function App(): JSX.Element {
       tabs
         .filter(
           (tab) =>
-            settings.autoSave &&
+            autoSaveSettings.enabled &&
             tab.dirty &&
             Boolean(tab.filePath) &&
             !deletedTabIds.has(tab.id) &&
@@ -712,7 +814,7 @@ function App(): JSX.Element {
     for (const [tabId, pending] of timers) {
       const tab = eligibleTabs.get(tabId)
       const signature = tab
-        ? `${tab.filePath ?? ''}\u0000${tab.markdown}\u0000${settings.autoSaveDelayMs}`
+        ? `${tab.filePath ?? ''}\u0000${tab.markdown}\u0000${autoSaveSettings.delayMs}`
         : undefined
       if (signature !== pending.signature) {
         window.clearTimeout(pending.timer)
@@ -722,15 +824,15 @@ function App(): JSX.Element {
 
     for (const tab of eligibleTabs.values()) {
       if (timers.has(tab.id)) continue
-      const signature = `${tab.filePath ?? ''}\u0000${tab.markdown}\u0000${settings.autoSaveDelayMs}`
+      const signature = `${tab.filePath ?? ''}\u0000${tab.markdown}\u0000${autoSaveSettings.delayMs}`
       const timer = window.setTimeout(() => {
         const pending = timers.get(tab.id)
         if (pending?.signature === signature) timers.delete(tab.id)
         void saveTab(tab.id, false, true)
-      }, settings.autoSaveDelayMs)
+      }, autoSaveSettings.delayMs)
       timers.set(tab.id, { timer, signature })
     }
-  }, [conflicts, deletedTabIds, saveTab, settings.autoSave, settings.autoSaveDelayMs, tabs])
+  }, [autoSaveSettings.delayMs, autoSaveSettings.enabled, conflicts, deletedTabIds, saveTab, tabs])
 
   useEffect(() => {
     const timers = autoSaveTimersRef.current
@@ -756,6 +858,12 @@ function App(): JSX.Element {
         break
       case 'save-as':
         if (activeTabIdRef.current) await saveTab(activeTabIdRef.current, true)
+        break
+      case 'export-html':
+        openExportDialog('html')
+        break
+      case 'export-pdf':
+        openExportDialog('pdf')
         break
       case 'reload':
         await reloadActiveFromDisk()
@@ -804,6 +912,8 @@ function App(): JSX.Element {
           else showToast('请先打开一个工作区。')
         }}
         onOpenSettings={() => setSettingsOpen(true)}
+        onExportHtml={() => openExportDialog('html')}
+        onExportPdf={() => openExportDialog('pdf')}
         onInsertImage={() => void editorRef.current?.insertImageFromPicker()}
       />
       <main
@@ -897,6 +1007,20 @@ function App(): JSX.Element {
         themeController={null}
         onApplied={applyRuntimeSettings}
       />
+
+      {exportMode && activeTab ? (
+        <ExportDialog
+          mode={exportMode}
+          defaultTitle={activeTab.title.replace(/\.(?:md|markdown)$/iu, '')}
+          busy={exportBusy}
+          error={exportError}
+          onClose={() => {
+            if (!exportBusy) setExportMode(undefined)
+          }}
+          onExportHtml={(title, imageStrategy) => void exportHtml(title, imageStrategy)}
+          onExportPdf={(title, options) => void exportPdf(title, options)}
+        />
+      ) : null}
 
       {conflict && conflictTab ? (
         <FileConflictDialog

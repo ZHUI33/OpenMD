@@ -12,6 +12,8 @@ export const IPC_CHANNELS = Object.freeze({
   imagesSave: 'openmd:images:save',
   imagesSelect: 'openmd:images:select',
   imagesResolve: 'openmd:images:resolve',
+  exportHtml: 'openmd:export:html',
+  exportPdf: 'openmd:export:pdf',
   workspaceOpen: 'openmd:workspace:open',
   workspaceGetCurrent: 'openmd:workspace:get-current',
   workspaceListDirectory: 'openmd:workspace:list-directory',

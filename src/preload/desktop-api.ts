@@ -4,6 +4,8 @@ import type {
   AppInfo,
   ConfirmCloseRequest,
   ConfirmCloseResult,
+  ExportHtmlRequest,
+  ExportPdfRequest,
   RendererCommand,
   ReleaseDocumentRequest,
   ResolveImageRequest,
@@ -72,6 +74,16 @@ export const openMdApi: OpenMdApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.imagesSelect, request) as Promise<SaveImageResult>,
     resolveImage: (request: ResolveImageRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.imagesResolve, request) as Promise<ResolveImageResult>,
+  }),
+  exports: Object.freeze({
+    html: (request: ExportHtmlRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.exportHtml, request) as ReturnType<
+        OpenMdApi['exports']['html']
+      >,
+    pdf: (request: ExportPdfRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.exportPdf, request) as ReturnType<
+        OpenMdApi['exports']['pdf']
+      >,
   }),
   workspace: Object.freeze({
     open: () => ipcRenderer.invoke(IPC_CHANNELS.workspaceOpen) as Promise<OpenWorkspaceResult>,

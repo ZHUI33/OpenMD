@@ -9,6 +9,8 @@ export interface TitleBarProps {
   onOpenWorkspace?: () => void
   onOpenSearch?: () => void
   onOpenSettings?: () => void
+  onExportHtml?: () => void
+  onExportPdf?: () => void
 }
 
 export function TitleBar({
@@ -18,6 +20,8 @@ export function TitleBar({
   onOpenWorkspace,
   onOpenSearch,
   onOpenSettings,
+  onExportHtml,
+  onExportPdf,
 }: TitleBarProps): JSX.Element {
   const activeTab = useEditorTabsStore((state) =>
     state.tabs.find((tab) => tab.id === state.activeTabId),
@@ -62,6 +66,12 @@ export function TitleBar({
           onClick={onInsertImage}
         >
           插入图片
+        </button>
+        <button className="title-action-button" type="button" onClick={onExportHtml}>
+          导出 HTML
+        </button>
+        <button className="title-action-button" type="button" onClick={onExportPdf}>
+          导出 PDF
         </button>
         <button className="title-action-button" type="button" onClick={onOpenSettings}>
           设置

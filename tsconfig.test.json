@@ -4,5 +4,5 @@
     "composite": false,
     "types": ["node"]
   },
-  "include": ["tests/**/*.ts"]
+  "include": ["tests/**/*.ts", "src/renderer/src/**/*.d.ts"]
 }

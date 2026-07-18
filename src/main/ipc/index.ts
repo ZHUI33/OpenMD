@@ -7,6 +7,8 @@ import type { IpcMainInvokeEvent } from 'electron'
 import type {
   AppInfo,
   ConfirmCloseRequest,
+  ExportHtmlRequest,
+  ExportPdfRequest,
   OpenDocumentRequest,
   ResolveImageRequest,
   ResolveCloseRequest,
@@ -22,6 +24,7 @@ import type {
 } from '../../shared/desktop-api.types'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { DocumentService } from '../document-service'
+import type { ExportService } from '../export-service'
 import type { ImageService } from '../image-service'
 import type { WorkspaceService } from '../workspace-service'
 import { markRendererReady, reloadMainWindow, resolveCloseRequest } from '../window'
@@ -176,6 +179,49 @@ function parseResolveImageRequest(value: unknown): ResolveImageRequest {
   return { documentPath: value.documentPath, source: value.source }
 }
 
+function parseExportHtmlRequest(value: unknown): ExportHtmlRequest {
+  if (
+    !isRecord(value) ||
+    typeof value.documentHtml !== 'string' ||
+    typeof value.title !== 'string' ||
+    value.title.length > 1_000 ||
+    (value.documentPath !== undefined && typeof value.documentPath !== 'string')
+  ) {
+    throw new TypeError('Invalid HTML export request.')
+  }
+  return {
+    documentHtml: value.documentHtml,
+    title: value.title,
+    documentPath: value.documentPath as string | undefined,
+  }
+}
+
+function parseExportPdfRequest(value: unknown): ExportPdfRequest {
+  const html = parseExportHtmlRequest(value)
+  if (
+    !isRecord(value) ||
+    (value.pageSize !== 'A4' && value.pageSize !== 'Letter') ||
+    typeof value.printBackground !== 'boolean' ||
+    !isRecord(value.margins)
+  ) {
+    throw new TypeError('Invalid PDF export request.')
+  }
+  const margins = {} as ExportPdfRequest['margins']
+  for (const side of ['top', 'right', 'bottom', 'left'] as const) {
+    const margin = value.margins[side]
+    if (typeof margin !== 'number' || !Number.isFinite(margin) || margin < 0 || margin > 5) {
+      throw new TypeError(`Invalid PDF ${side} margin.`)
+    }
+    margins[side] = margin
+  }
+  return {
+    ...html,
+    pageSize: value.pageSize,
+    printBackground: value.printBackground,
+    margins,
+  }
+}
+
 function parseRelativePath(value: unknown, fieldName = 'relativePath'): string {
   if (typeof value !== 'string' || value.length > 32_768 || value.includes('\0')) {
     throw new TypeError(`Invalid workspace ${fieldName}.`)
@@ -251,6 +297,7 @@ export function registerIpcHandlers(
   documentService: DocumentService,
   imageService: ImageService,
   workspaceService: WorkspaceService,
+  exportService: ExportService,
 ): void {
   ipcMain.removeHandler(IPC_CHANNELS.appGetInfo)
   ipcMain.handle(IPC_CHANNELS.appGetInfo, (event): AppInfo => {
@@ -328,6 +375,16 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.imagesResolve, (event, value: unknown) => {
     const senderWindow = getTrustedSenderWindow(event)
     return imageService.resolveImage(senderWindow, parseResolveImageRequest(value))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.exportHtml)
+  ipcMain.handle(IPC_CHANNELS.exportHtml, (event, value: unknown) => {
+    return exportService.exportHtml(getTrustedSenderWindow(event), parseExportHtmlRequest(value))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.exportPdf)
+  ipcMain.handle(IPC_CHANNELS.exportPdf, (event, value: unknown) => {
+    return exportService.exportPdf(getTrustedSenderWindow(event), parseExportPdfRequest(value))
   })
 
   ipcMain.removeHandler(IPC_CHANNELS.workspaceOpen)

@@ -25,6 +25,7 @@ function asSettingsUpdate(settings: AppSettings): AppSettingsUpdate {
     defaultEditorMode: settings.defaultEditorMode,
     autoSave: settings.autoSave,
     autoSaveDelayMs: settings.autoSaveDelayMs,
+    autoUpdate: settings.autoUpdate,
     editorFontFamily: settings.editorFontFamily,
     editorFontSizePx: settings.editorFontSizePx,
     editorLineHeight: settings.editorLineHeight,
@@ -273,6 +274,14 @@ export function SettingsDialog({
                       onChange={(event) => updateDraft('autoSave', event.currentTarget.checked)}
                     />
                     <span>自动保存</span>
+                  </label>
+                  <label className="settings-toggle">
+                    <input
+                      type="checkbox"
+                      checked={draft.autoUpdate}
+                      onChange={(event) => updateDraft('autoUpdate', event.currentTarget.checked)}
+                    />
+                    <span>启动时自动检查更新（仅发布版）</span>
                   </label>
                   <label className="settings-field">
                     <span>自动保存延迟</span>
