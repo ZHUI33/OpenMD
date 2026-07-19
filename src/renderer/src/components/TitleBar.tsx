@@ -31,7 +31,10 @@ export function TitleBar({
     <header className="title-bar">
       <div className="brand" aria-label="OpenMD">
         <span className="brand-mark" aria-hidden="true">
-          M
+          <svg viewBox="0 0 32 32" focusable="false">
+            <path d="M5.5 22V9.5l5.3 6.7 5.3-6.7V22" />
+            <path className="brand-mark__arrow" d="M24 9.5v12.4m-3.9-3.8 3.9 4 3.9-4" />
+          </svg>
         </span>
         <span className="brand-name">
           {activeTab ? `${activeTab.title}${activeTab.dirty ? ' *' : ''} — OpenMD` : 'OpenMD'}

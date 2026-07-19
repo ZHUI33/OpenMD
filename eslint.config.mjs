@@ -11,9 +11,21 @@ export default tseslint.config(
   js.configs.recommended,
   ...tseslint.configs.recommended,
   {
-    files: ['*.config.ts', 'src/main/**/*.ts', 'src/preload/**/*.ts', 'tests/**/*.ts'],
+    files: [
+      '*.config.ts',
+      'scripts/**/*.{cjs,mjs}',
+      'src/main/**/*.ts',
+      'src/preload/**/*.ts',
+      'tests/**/*.ts',
+    ],
     languageOptions: {
       globals: globals.node,
+    },
+  },
+  {
+    files: ['scripts/**/*.cjs'],
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
     },
   },
   {

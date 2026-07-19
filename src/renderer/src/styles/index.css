@@ -64,9 +64,22 @@ select {
   height: 28px;
   place-items: center;
   border-radius: 8px;
-  background: var(--primary);
-  color: var(--primary-contrast);
-  font-size: 14px;
+  background: #111c38;
+  box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%);
+}
+
+.brand-mark svg {
+  width: 21px;
+  height: 21px;
+  fill: none;
+  stroke: #f8fafc;
+  stroke-width: 3.1;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.brand-mark .brand-mark__arrow {
+  stroke: #60a5fa;
 }
 
 .brand-name {
