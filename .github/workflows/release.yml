@@ -24,6 +24,9 @@ jobs:
             command: dist:mac
             artifact: macos-x64-arm64
     runs-on: ${{ matrix.os }}
+    env:
+      MACOS_CSC_LINK: ${{ secrets.MACOS_CSC_LINK }}
+      WINDOWS_CSC_LINK: ${{ secrets.WINDOWS_CSC_LINK }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -38,11 +41,25 @@ jobs:
           cache: pnpm
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
-      - name: Build ${{ matrix.name }}
+      - name: Build unsigned ${{ matrix.name }}
+        if: >-
+          (runner.os == 'macOS' && env.MACOS_CSC_LINK == '') ||
+          (runner.os == 'Windows' && env.WINDOWS_CSC_LINK == '')
         run: pnpm ${{ matrix.command }}
         env:
-          CSC_LINK: ${{ runner.os == 'macOS' && secrets.MACOS_CSC_LINK || secrets.WINDOWS_CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ runner.os == 'macOS' && secrets.MACOS_CSC_KEY_PASSWORD || secrets.WINDOWS_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      - name: Build signed Windows x64
+        if: runner.os == 'Windows' && env.WINDOWS_CSC_LINK != ''
+        run: pnpm ${{ matrix.command }}
+        env:
+          CSC_LINK: ${{ env.WINDOWS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.WINDOWS_CSC_KEY_PASSWORD }}
+      - name: Build signed macOS x64 and arm64
+        if: runner.os == 'macOS' && env.MACOS_CSC_LINK != ''
+        run: pnpm ${{ matrix.command }}
+        env:
+          CSC_LINK: ${{ env.MACOS_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MACOS_CSC_KEY_PASSWORD }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
