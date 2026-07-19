@@ -71,7 +71,6 @@ jobs:
             dist/*.exe
             dist/*.dmg
             dist/*.yml
-            dist/*.yaml
             dist/*.blockmap
           if-no-files-found: error
 
@@ -97,5 +96,4 @@ jobs:
             dist/*.exe
             dist/*.dmg
             dist/*.yml
-            dist/*.yaml
             dist/*.blockmap
