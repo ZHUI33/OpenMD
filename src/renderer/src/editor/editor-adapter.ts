@@ -29,6 +29,7 @@ import type { OutlineItem } from './outline-feature'
 import { openMdTableFeatures, openMdTablePlugins } from './table-feature'
 import { createDocumentOutlineFeature } from './toc-feature'
 import type { CursorAnchor, EditorDocumentAdapter } from './editor.types'
+import { createOpenMdFormattingFeature } from './formatting-feature'
 
 export interface EditorAdapterOptions {
   root: HTMLElement
@@ -40,6 +41,8 @@ export interface EditorAdapterOptions {
   onEnsureDocumentSaved?: () => Promise<string | undefined>
   onOutlineChange?: (outline: readonly OutlineItem[]) => void
   onActiveHeadingChange?: (id: string | null) => void
+  openExternalUrl?: (url: string) => Promise<void>
+  onError?: (message: string) => void
 }
 
 const unavailableImagesApi: RendererImagesApi = {
@@ -60,6 +63,7 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
   private readonly mathFeature = createOpenMdMathFeature()
   private readonly mermaidFeature = createOpenMdMermaidFeature()
   private readonly outlineFeature = createDocumentOutlineFeature({ viewportOffset: 72 })
+  private readonly formattingFeature: ReturnType<typeof createOpenMdFormattingFeature>
   private readonly unsubscribeOutline: Array<() => void>
   private markdown: string
   private markdownDocument: ProseMirrorNode | null = null
@@ -107,6 +111,11 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
       getDocumentPath: options.getDocumentPath ?? (() => undefined),
       onEnsureDocumentSaved: options.onEnsureDocumentSaved ?? (async () => undefined),
     })
+    this.formattingFeature = createOpenMdFormattingFeature({
+      openExternalUrl:
+        options.openExternalUrl ?? (async () => Promise.reject(new Error('外部链接服务不可用。'))),
+      onError: options.onError,
+    })
     this.crepe = new Crepe({
       root: options.root,
       defaultValue: options.initialMarkdown,
@@ -150,6 +159,7 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
     this.crepe.editor.use(this.mathFeature.plugins)
     this.crepe.editor.use(this.mermaidFeature.plugins)
     this.crepe.editor.use(this.outlineFeature.plugins)
+    this.crepe.editor.use(this.formattingFeature)
 
     this.crepe.setReadonly(options.readOnly).on((listener) => {
       listener.markdownUpdated((ctx, markdown) => {

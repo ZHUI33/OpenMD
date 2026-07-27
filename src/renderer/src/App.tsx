@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type { JSX } from 'react'
+import type { CSSProperties, JSX } from 'react'
 
 import type {
   HtmlImageStrategy,
@@ -11,10 +11,13 @@ import type {
 } from '../../shared/desktop-api.types'
 import { DEFAULT_SETTINGS, getAutoSaveSettings } from '../../shared/settings'
 import type { AppSettings, AppSettingsUpdate, BuiltInTheme } from '../../shared/settings'
+import type { SidebarPanel } from '../../shared/settings'
 import { FileConflictDialog } from './components/FileConflictDialog'
 import { ExportDialog } from './components/ExportDialog'
 import type { PdfExportOptions } from './components/ExportDialog'
 import { SettingsDialog } from './components/SettingsDialog'
+import { NavigationSidebar } from './components/NavigationSidebar'
+import { OutlinePanel } from './components/OutlinePanel'
 import { StatusBar } from './components/StatusBar'
 import { TabBar } from './components/TabBar'
 import { TitleBar } from './components/TitleBar'
@@ -22,6 +25,7 @@ import { WorkspaceSearch } from './components/WorkspaceSearch'
 import { WorkspaceSidebar } from './components/WorkspaceSidebar'
 import { OpenMdEditor } from './editor/OpenMdEditor'
 import type { OpenMdEditorHandle, ResolvedTheme } from './editor/editor.types'
+import type { OutlineItem } from './editor/outline-feature'
 import { resolveExternalFileChange } from './external-file-state'
 import { buildStandaloneHtml } from './export-document'
 import { getRendererSettingsApi } from './settings/settings-api'
@@ -76,9 +80,6 @@ function App(): JSX.Element {
   const tabs = useEditorTabsStore((state) => state.tabs)
   const activeTabId = useEditorTabsStore((state) => state.activeTabId)
   const activeTab = tabs.find((tab) => tab.id === activeTabId)
-  const sidebarVisible = useAppStore((state) => state.sidebarVisible)
-  const setSidebarVisible = useAppStore((state) => state.setSidebarVisible)
-  const toggleSidebar = useAppStore((state) => state.toggleSidebar)
   const setSourceCursor = useAppStore((state) => state.setSourceCursor)
   const editorRef = useRef<OpenMdEditorHandle>(null)
   const activeTabIdRef = useRef(activeTabId)
@@ -99,7 +100,8 @@ function App(): JSX.Element {
   const [settingsReady, setSettingsReady] = useState(false)
   const [resolvedTheme, setResolvedTheme] = useState<ResolvedTheme>('light')
   const [workspace, setWorkspace] = useState<WorkspaceInfo>()
-  const [searchVisible, setSearchVisible] = useState(false)
+  const [outline, setOutline] = useState<readonly OutlineItem[]>([])
+  const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null)
   const [conflicts, setConflicts] = useState<Record<string, FileConflictState>>({})
   const [deletedTabIds, setDeletedTabIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<ToastState>()
@@ -113,6 +115,30 @@ function App(): JSX.Element {
     toastSequenceRef.current += 1
     setToast({ id: toastSequenceRef.current, message, kind })
   }, [])
+
+  const updateSidebarSettings = useCallback(
+    (
+      update: Pick<AppSettingsUpdate, 'sidebarVisible' | 'sidebarWidthPx' | 'sidebarPanel'>,
+    ): void => {
+      setSettings((current) => ({ ...current, ...update }))
+      void settingsApi
+        .update(update)
+        .then((saved) => setSettings(saved))
+        .catch(() => showToast('保存侧栏设置失败。', 'error'))
+    },
+    [settingsApi, showToast],
+  )
+
+  const showSidebarPanel = useCallback(
+    (panel: SidebarPanel): void => {
+      if (panel === 'search' && !workspace) {
+        showToast('请先打开一个工作区。')
+        return
+      }
+      updateSidebarSettings({ sidebarVisible: true, sidebarPanel: panel })
+    },
+    [showToast, updateSidebarSettings, workspace],
+  )
 
   useEffect(() => {
     if (!toast) return
@@ -245,12 +271,11 @@ function App(): JSX.Element {
       workspaceNavigationRef.current += 1
       relativePathByTabIdRef.current.clear()
       setWorkspace(result.workspace)
-      setSearchVisible(false)
-      setSidebarVisible(true)
+      updateSidebarSettings({ sidebarVisible: true, sidebarPanel: 'files' })
     } catch (error) {
       showToast(error instanceof Error ? error.message : '打开工作区失败。', 'error')
     }
-  }, [setSidebarVisible, showToast])
+  }, [showToast, updateSidebarSettings])
 
   const handleWorkspaceEntryRenamed = useCallback(
     (previous: WorkspaceEntry, renamed: WorkspaceEntry): void => {
@@ -316,15 +341,10 @@ function App(): JSX.Element {
     [openWorkspaceFile],
   )
 
-  const handleSearchVisibleChange = useCallback(
-    (visible: boolean): void => {
-      if (!workspace && visible) showToast('请先打开一个工作区。')
-      else setSearchVisible(visible)
-    },
-    [showToast, workspace],
+  const closeWorkspaceSearch = useCallback(
+    (): void => updateSidebarSettings({ sidebarVisible: false }),
+    [updateSidebarSettings],
   )
-
-  const closeWorkspaceSearch = useCallback((): void => setSearchVisible(false), [])
   const openWorkspaceSearchResult = useCallback(
     (match: WorkspaceSearchMatch): void => {
       void openWorkspaceFile(match.relativePath, match.lineNumber)
@@ -693,11 +713,10 @@ function App(): JSX.Element {
       .then((currentWorkspace) => {
         if (currentWorkspace) {
           setWorkspace(currentWorkspace)
-          setSidebarVisible(true)
         }
       })
       .catch(() => undefined)
-  }, [setSidebarVisible])
+  }, [])
 
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
@@ -734,13 +753,13 @@ function App(): JSX.Element {
         void openWorkspace()
       } else if (event.key.toLocaleLowerCase('en-US') === 'f') {
         event.preventDefault()
-        if (workspace) setSearchVisible(true)
+        if (workspace) showSidebarPanel('search')
         else showToast('请先打开一个工作区。')
       }
     }
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [openWorkspace, showToast, workspace])
+  }, [openWorkspace, showSidebarPanel, showToast, workspace])
 
   useEffect(() => {
     return window.openmd.workspace.onFileChange((change: WorkspaceFileChange) => {
@@ -890,7 +909,7 @@ function App(): JSX.Element {
         await openWorkspace()
         break
       case 'search-workspace':
-        if (workspace) setSearchVisible(true)
+        if (workspace) showSidebarPanel('search')
         else showToast('请先打开一个工作区。')
         break
     }
@@ -904,11 +923,12 @@ function App(): JSX.Element {
   return (
     <div className="app-shell">
       <TitleBar
+        sidebarVisible={settings.sidebarVisible}
         insertImageDisabled={!activeTab || activeTab.editorMode === 'source'}
-        onToggleSidebar={toggleSidebar}
+        onToggleSidebar={() => updateSidebarSettings({ sidebarVisible: !settings.sidebarVisible })}
         onOpenWorkspace={handleOpenWorkspaceRequest}
         onOpenSearch={() => {
-          if (workspace) setSearchVisible(true)
+          if (workspace) showSidebarPanel('search')
           else showToast('请先打开一个工作区。')
         }}
         onOpenSettings={() => setSettingsOpen(true)}
@@ -918,24 +938,52 @@ function App(): JSX.Element {
       />
       <main
         className="workspace-layout"
-        data-sidebar-visible={sidebarVisible}
+        data-sidebar-visible={settings.sidebarVisible}
+        style={{ '--sidebar-width': `${settings.sidebarWidthPx}px` } as CSSProperties}
         aria-label="编辑工作区"
       >
-        <div className="workspace-sidebar-slot" hidden={!sidebarVisible}>
-          <WorkspaceSidebar
-            api={window.openmd.workspace}
-            workspace={workspace}
-            selectedFilePath={activeTab?.filePath}
-            includeTextFiles={settings.showTextFiles}
-            searchVisible={searchVisible}
-            onOpenWorkspace={handleOpenWorkspaceRequest}
-            onOpenFile={handleWorkspaceFileRequest}
-            onEntryRenamed={handleWorkspaceEntryRenamed}
-            onEntryDeleted={handleWorkspaceEntryDeleted}
-            onSearchVisibleChange={handleSearchVisibleChange}
-            onError={handleSidebarError}
+        {settings.sidebarVisible ? (
+          <NavigationSidebar
+            panel={settings.sidebarPanel}
+            width={settings.sidebarWidthPx}
+            onPanelChange={showSidebarPanel}
+            onCollapse={() => updateSidebarSettings({ sidebarVisible: false })}
+            onWidthChange={(sidebarWidthPx) => updateSidebarSettings({ sidebarWidthPx })}
+            files={
+              <WorkspaceSidebar
+                api={window.openmd.workspace}
+                workspace={workspace}
+                selectedFilePath={activeTab?.filePath}
+                includeTextFiles={settings.showTextFiles}
+                onOpenWorkspace={handleOpenWorkspaceRequest}
+                onOpenFile={handleWorkspaceFileRequest}
+                onEntryRenamed={handleWorkspaceEntryRenamed}
+                onEntryDeleted={handleWorkspaceEntryDeleted}
+                onError={handleSidebarError}
+              />
+            }
+            search={
+              workspace ? (
+                <WorkspaceSearch
+                  key={workspace.rootPath}
+                  api={window.openmd.workspace}
+                  includeTextFiles={settings.showTextFiles}
+                  onClose={closeWorkspaceSearch}
+                  onOpenResult={openWorkspaceSearchResult}
+                />
+              ) : (
+                <div className="sidebar-empty-state">请先打开一个工作区再进行搜索。</div>
+              )
+            }
+            outline={
+              <OutlinePanel
+                activeId={activeHeadingId}
+                items={outline}
+                onNavigate={(id) => editorRef.current?.scrollToHeading?.(id)}
+              />
+            }
           />
-        </div>
+        ) : null}
         <section className="editor-pane" aria-label="文档标签与编辑器">
           <TabBar
             tabs={tabs}
@@ -946,15 +994,6 @@ function App(): JSX.Element {
             onCloseRight={(tabId) => void closeTabs('right', tabId)}
           />
           <div className="editor-stage">
-            {workspace && searchVisible ? (
-              <WorkspaceSearch
-                key={workspace.rootPath}
-                api={window.openmd.workspace}
-                includeTextFiles={settings.showTextFiles}
-                onClose={closeWorkspaceSearch}
-                onOpenResult={openWorkspaceSearchResult}
-              />
-            ) : null}
             {activeTab && deletedTabIds.has(activeTab.id) ? (
               <div className="deleted-file-banner" role="status">
                 <span>此文件已从磁盘删除，标签中的内容仍被保留。</span>
@@ -994,6 +1033,9 @@ function App(): JSX.Element {
               onSourceLineWrappingChange={(sourceLineWrapping) => {
                 useAppStore.getState().setSourceLineWrapping(sourceLineWrapping)
               }}
+              onOutlineChange={setOutline}
+              onActiveHeadingChange={setActiveHeadingId}
+              onError={(message) => showToast(message, 'error')}
             />
           </div>
         </section>

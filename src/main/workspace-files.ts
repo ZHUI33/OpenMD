@@ -1,4 +1,4 @@
-import { lstat, mkdir, readFile, readdir, rename, rm, stat, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, readdir, rename, stat, writeFile } from 'node:fs/promises'
 import { basename, dirname, extname, join } from 'node:path'
 
 import type {
@@ -153,21 +153,11 @@ export async function renameWorkspaceEntry(
   return createWorkspaceEntry(rootPath, targetPath, targetKind)
 }
 
-export async function deleteWorkspaceEntry(
-  rootPath: string,
-  request: WorkspacePathRequest,
-): Promise<void> {
-  if (!request.relativePath) throw new WorkspacePathError('不能删除工作区根目录。')
-  await rejectSymbolicLink(rootPath, request.relativePath)
-  const filePath = await resolveExistingWorkspacePath(rootPath, request.relativePath)
-  const fileStats = await stat(filePath)
-  await rm(filePath, { recursive: fileStats.isDirectory(), force: false })
-}
-
 export async function resolveWorkspaceEntry(
   rootPath: string,
   request: WorkspacePathRequest,
 ): Promise<{ filePath: string; relativePath: string }> {
+  if (!request.relativePath) throw new WorkspacePathError('不能删除或修改工作区根目录。')
   await rejectSymbolicLink(rootPath, request.relativePath)
   const filePath = await resolveExistingWorkspacePath(rootPath, request.relativePath)
   return { filePath, relativePath: toWorkspaceRelativePath(rootPath, filePath) }

@@ -1,7 +1,6 @@
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useRef, useState } from 'react'
 import type { JSX } from 'react'
 
-import { OutlinePanel } from '../components/OutlinePanel'
 import { OpenMdEditorAdapter } from './editor-adapter'
 import { EditorModeCoordinator } from './editor-coordinator'
 import type {
@@ -10,7 +9,6 @@ import type {
   OpenMdEditorProps,
   ResolvedTheme,
 } from './editor.types'
-import type { OutlineItem } from './outline-feature'
 import { MarkdownSourceEditorAdapter } from './source-editor-adapter'
 
 type ManagedEditorAdapter = OpenMdEditorAdapter | MarkdownSourceEditorAdapter
@@ -35,6 +33,9 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
     documentPath,
     imagesApi,
     onEnsureDocumentSaved,
+    onOutlineChange,
+    onActiveHeadingChange,
+    onError,
   },
   forwardedRef,
 ): JSX.Element {
@@ -56,11 +57,11 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
   const imagesApiRef = useRef(imagesApi)
   const documentPathRef = useRef(documentPath)
   const ensureDocumentSavedRef = useRef(onEnsureDocumentSaved)
+  const onOutlineChangeRef = useRef(onOutlineChange)
+  const onActiveHeadingChangeRef = useRef(onActiveHeadingChange)
+  const onErrorRef = useRef(onError)
   const [mode, setModeState] = useState<EditorMode>(initialMode)
   const [switching, setSwitching] = useState(true)
-  const [outline, setOutline] = useState<readonly OutlineItem[]>([])
-  const [activeHeadingId, setActiveHeadingId] = useState<string | null>(null)
-  const [outlineVisible, setOutlineVisible] = useState(true)
 
   onChangeRef.current = onChange
   onModeChangeRef.current = onModeChange
@@ -70,6 +71,9 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
   imagesApiRef.current = imagesApi
   documentPathRef.current = documentPath
   ensureDocumentSavedRef.current = onEnsureDocumentSaved
+  onOutlineChangeRef.current = onOutlineChange
+  onActiveHeadingChangeRef.current = onActiveHeadingChange
+  onErrorRef.current = onError
   resolvedThemeRef.current = resolvedTheme
 
   const coordinatorRef = useRef<EditorModeCoordinator | null>(null)
@@ -131,11 +135,17 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
           getDocumentPath: () => documentPathRef.current,
           onEnsureDocumentSaved: async () => ensureDocumentSavedRef.current?.(),
           onOutlineChange: (nextOutline) => {
-            if (mountedEditorRef.current?.adapter === adapter) setOutline([...nextOutline])
+            if (mountedEditorRef.current?.adapter === adapter) {
+              onOutlineChangeRef.current?.([...nextOutline])
+            }
           },
           onActiveHeadingChange: (id) => {
-            if (mountedEditorRef.current?.adapter === adapter) setActiveHeadingId(id)
+            if (mountedEditorRef.current?.adapter === adapter) {
+              onActiveHeadingChangeRef.current?.(id)
+            }
           },
+          openExternalUrl: (url) => window.openmd.openExternalUrl({ url }),
+          onError: (message) => onErrorRef.current?.(message),
           onChange: (markdown) => coordinator.acceptChange(adapter, markdown),
         })
       } else {
@@ -296,6 +306,10 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
         mountedEditorRef.current?.adapter.restoreCursorAnchor?.({ offset })
         mountedEditorRef.current?.adapter.focus()
       },
+      scrollToHeading: (id) => {
+        const mountedEditor = mountedEditorRef.current
+        return mountedEditor?.mode === 'visual' ? mountedEditor.adapter.scrollToHeading(id) : false
+      },
       whenIdle: async () => {
         await lifecycleRef.current
         await mountedEditorRef.current?.adapter.whenStable()
@@ -341,24 +355,7 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
   }, [resolvedTheme])
 
   return (
-    <div
-      className="openmd-editor-layout"
-      data-mode={mode}
-      data-outline-visible={mode === 'visual' && outlineVisible}
-      data-switching={switching}
-    >
-      {mode === 'visual' ? (
-        <OutlinePanel
-          activeId={activeHeadingId}
-          items={outline}
-          visible={outlineVisible}
-          onNavigate={(id) => {
-            const mountedEditor = mountedEditorRef.current
-            if (mountedEditor?.mode === 'visual') mountedEditor.adapter.scrollToHeading(id)
-          }}
-          onVisibleChange={setOutlineVisible}
-        />
-      ) : null}
+    <div className="openmd-editor-layout" data-mode={mode} data-switching={switching}>
       <div
         ref={scrollContainerRef}
         className={mode === 'visual' ? 'openmd-editor-scroll' : 'openmd-source-editor-scroll'}

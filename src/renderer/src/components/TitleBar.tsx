@@ -1,8 +1,12 @@
+import { useEffect, useRef, useState } from 'react'
 import type { JSX } from 'react'
 
 import { useEditorTabsStore } from '../stores/editor-tabs-store'
+import { Icon } from './Icon'
+import type { IconName } from './Icon'
 
 export interface TitleBarProps {
+  sidebarVisible: boolean
   onInsertImage?: () => void
   insertImageDisabled?: boolean
   onToggleSidebar?: () => void
@@ -13,7 +17,40 @@ export interface TitleBarProps {
   onExportPdf?: () => void
 }
 
+interface IconActionProps {
+  icon: IconName
+  label: string
+  pressed?: boolean
+  disabled?: boolean
+  className?: string
+  onClick?: () => void
+}
+
+function IconAction({
+  icon,
+  label,
+  pressed,
+  disabled,
+  className = '',
+  onClick,
+}: IconActionProps): JSX.Element {
+  return (
+    <button
+      className={`icon-button ${className}`.trim()}
+      type="button"
+      aria-label={label}
+      aria-pressed={pressed}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+    >
+      <Icon name={icon} />
+    </button>
+  )
+}
+
 export function TitleBar({
+  sidebarVisible,
   onInsertImage,
   insertImageDisabled = false,
   onToggleSidebar,
@@ -26,6 +63,38 @@ export function TitleBar({
   const activeTab = useEditorTabsStore((state) =>
     state.tabs.find((tab) => tab.id === state.activeTabId),
   )
+  const menuRef = useRef<HTMLDivElement>(null)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+
+  useEffect(() => {
+    if (!menuOpen) return
+    const close = (event: PointerEvent): void => {
+      if (
+        event.target instanceof Node &&
+        !menuRef.current?.contains(event.target) &&
+        !menuButtonRef.current?.contains(event.target)
+      ) {
+        setMenuOpen(false)
+      }
+    }
+    const onKeyDown = (event: KeyboardEvent): void => {
+      if (event.key !== 'Escape') return
+      setMenuOpen(false)
+      menuButtonRef.current?.focus()
+    }
+    window.addEventListener('pointerdown', close, true)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('pointerdown', close, true)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [menuOpen])
+
+  const runMenuAction = (action?: () => void): void => {
+    setMenuOpen(false)
+    action?.()
+  }
 
   return (
     <header className="title-bar">
@@ -41,44 +110,76 @@ export function TitleBar({
         </span>
       </div>
 
-      <div className="title-actions">
-        <button className="title-action-button" type="button" onClick={onToggleSidebar}>
-          文件树
-        </button>
-        <button
-          className="title-action-button"
-          type="button"
-          title="打开文件夹 (Ctrl/Cmd+Shift+O)"
+      <div className="title-actions" aria-label="应用操作">
+        <IconAction
+          icon="sidebar"
+          label={sidebarVisible ? '隐藏侧栏' : '显示侧栏'}
+          pressed={sidebarVisible}
+          onClick={onToggleSidebar}
+        />
+        <IconAction
+          icon="folder-open"
+          label="打开文件夹 (Ctrl/Cmd+Shift+O)"
+          className="title-action--responsive"
           onClick={onOpenWorkspace}
-        >
-          打开文件夹
-        </button>
-        <button
-          className="title-action-button"
-          type="button"
-          title="全文搜索 (Ctrl/Cmd+Shift+F)"
+        />
+        <IconAction
+          icon="search"
+          label="工作区搜索 (Ctrl/Cmd+Shift+F)"
+          className="title-action--wide"
           onClick={onOpenSearch}
-        >
-          搜索
-        </button>
-        <button
-          className="title-action-button"
-          type="button"
-          disabled={insertImageDisabled}
-          title={insertImageDisabled ? '请切换到所见即所得模式后插入图片' : undefined}
-          onClick={onInsertImage}
-        >
-          插入图片
-        </button>
-        <button className="title-action-button" type="button" onClick={onExportHtml}>
-          导出 HTML
-        </button>
-        <button className="title-action-button" type="button" onClick={onExportPdf}>
-          导出 PDF
-        </button>
-        <button className="title-action-button" type="button" onClick={onOpenSettings}>
-          设置
-        </button>
+        />
+        <div className="title-more">
+          <button
+            ref={menuButtonRef}
+            className="icon-button"
+            type="button"
+            aria-label="更多操作"
+            title="更多操作"
+            aria-haspopup="menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen((open) => !open)}
+          >
+            <Icon name="menu" />
+          </button>
+          {menuOpen ? (
+            <div ref={menuRef} className="desktop-menu title-more-menu" role="menu">
+              <button type="button" role="menuitem" onClick={() => runMenuAction(onOpenWorkspace)}>
+                <Icon name="folder-open" />
+                <span>打开文件夹…</span>
+                <kbd>Ctrl/Cmd ⇧ O</kbd>
+              </button>
+              <button type="button" role="menuitem" onClick={() => runMenuAction(onOpenSearch)}>
+                <Icon name="search" />
+                <span>工作区搜索</span>
+                <kbd>Ctrl/Cmd ⇧ F</kbd>
+              </button>
+              <div className="desktop-menu-separator" role="separator" />
+              <button
+                type="button"
+                role="menuitem"
+                disabled={insertImageDisabled}
+                onClick={() => runMenuAction(onInsertImage)}
+              >
+                <Icon name="image" />
+                <span>插入图片…</span>
+              </button>
+              <button type="button" role="menuitem" onClick={() => runMenuAction(onExportHtml)}>
+                <Icon name="export" />
+                <span>导出 HTML…</span>
+              </button>
+              <button type="button" role="menuitem" onClick={() => runMenuAction(onExportPdf)}>
+                <Icon name="export" />
+                <span>导出 PDF…</span>
+              </button>
+              <div className="desktop-menu-separator" role="separator" />
+              <button type="button" role="menuitem" onClick={() => runMenuAction(onOpenSettings)}>
+                <Icon name="settings" />
+                <span>设置…</span>
+              </button>
+            </div>
+          ) : null}
+        </div>
       </div>
     </header>
   )

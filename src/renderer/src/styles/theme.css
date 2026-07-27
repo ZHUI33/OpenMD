@@ -5,6 +5,15 @@
   --editor-font-size: 17px;
   --editor-line-height: 1.7;
   --editor-max-width: 860px;
+  --control-height: 30px;
+  --control-height-compact: 26px;
+  --radius-control: 5px;
+  --radius-panel: 8px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --focus-ring-size: 2px;
 }
 
 :root,
@@ -28,6 +37,8 @@
   --muted: #6f706b;
   --muted-subtle: #969892;
   --focus-ring: rgb(37 99 235 / 20%);
+  --control-hover: #edede8;
+  --control-active: #e3e9f7;
   --syntax-marker: #a1a19a;
   --inline-code-background: #eceff8;
   --inline-code-border: #d9dfef;
@@ -62,6 +73,7 @@
   --mermaid-error: #b42318;
   --dialog-backdrop: rgb(20 21 22 / 42%);
   --shadow: 0 16px 48px rgb(42 42 38 / 12%);
+  --shadow-menu: 0 8px 24px rgb(42 42 38 / 14%);
 }
 
 :root[data-theme='dark'] {
@@ -84,6 +96,8 @@
   --muted: #a1a4a6;
   --muted-subtle: #7f8487;
   --focus-ring: rgb(120 167 255 / 24%);
+  --control-hover: #303236;
+  --control-active: #29364b;
   --syntax-marker: #777c80;
   --inline-code-background: #282f3c;
   --inline-code-border: #39465a;
@@ -118,6 +132,7 @@
   --mermaid-error: #ff9a90;
   --dialog-backdrop: rgb(0 0 0 / 66%);
   --shadow: 0 16px 48px rgb(0 0 0 / 32%);
+  --shadow-menu: 0 8px 24px rgb(0 0 0 / 34%);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -141,6 +156,8 @@
     --muted: #a1a4a6;
     --muted-subtle: #7f8487;
     --focus-ring: rgb(120 167 255 / 24%);
+    --control-hover: #303236;
+    --control-active: #29364b;
     --syntax-marker: #777c80;
     --inline-code-background: #282f3c;
     --inline-code-border: #39465a;
@@ -175,5 +192,6 @@
     --mermaid-error: #ff9a90;
     --dialog-backdrop: rgb(0 0 0 / 66%);
     --shadow: 0 16px 48px rgb(0 0 0 / 32%);
+    --shadow-menu: 0 8px 24px rgb(0 0 0 / 34%);
   }
 }

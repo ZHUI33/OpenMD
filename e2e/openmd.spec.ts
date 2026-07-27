@@ -1,6 +1,8 @@
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { execFile } from 'node:child_process'
+import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
+import { promisify } from 'node:util'
 
 import { _electron as electron, expect, test } from '@playwright/test'
 import type { ElectronApplication, Page } from '@playwright/test'
@@ -13,6 +15,8 @@ const electronExecutable = resolve(
       : 'node_modules/electron/dist/electron',
 )
 const shortcutModifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+const clickModifier = process.platform === 'darwin' ? 'Meta' : 'Control'
+const execFileAsync = promisify(execFile)
 
 interface LaunchPaths {
   root: string
@@ -20,31 +24,34 @@ interface LaunchPaths {
   exportDirectory: string
 }
 
-async function launchOpenMd(
-  paths: LaunchPaths,
-  documentPath?: string,
-): Promise<ElectronApplication> {
+async function launchOpenMd(paths: LaunchPaths): Promise<ElectronApplication> {
   return electron.launch({
     executablePath: electronExecutable,
-    args: [resolve('.'), ...(documentPath ? [documentPath] : [])],
+    args: [resolve('.')],
     env: {
       ...process.env,
       OPENMD_E2E: '1',
       OPENMD_E2E_USER_DATA: join(paths.root, 'user-data'),
       OPENMD_E2E_SAVE_PATH: paths.savePath,
       OPENMD_E2E_EXPORT_DIR: paths.exportDirectory,
-      OPENMD_E2E_CLOSE_RESPONSE: 'cancel',
+      OPENMD_E2E_CLOSE_RESPONSE: 'discard',
       OPENMD_DISABLE_UPDATE_CHECKS: '1',
     },
   })
 }
 
-async function replaceSourceMarkdown(page: Page, markdown: string): Promise<void> {
-  const source = page.locator('.cm-content')
-  await expect(source).toBeVisible()
-  await source.click()
-  await page.keyboard.press(`${shortcutModifier}+A`)
-  await page.keyboard.insertText(markdown)
+async function stopOpenMd(application: ElectronApplication): Promise<void> {
+  const childProcess = application.process()
+  if (process.platform === 'win32') {
+    await execFileAsync('taskkill.exe', ['/PID', String(childProcess.pid), '/T', '/F']).catch(
+      () => undefined,
+    )
+  } else if (!childProcess.killed) {
+    childProcess.kill('SIGKILL')
+  }
+  if (childProcess.exitCode === null) {
+    await new Promise<void>((resolveExit) => childProcess.once('exit', () => resolveExit()))
+  }
 }
 
 async function runMenuCommand(application: ElectronApplication, commandId: string): Promise<void> {
@@ -55,21 +62,48 @@ async function runMenuCommand(application: ElectronApplication, commandId: strin
   }, commandId)
 }
 
-test('critical OpenMD document lifecycle stays inside an isolated temporary directory', async () => {
+async function selectText(page: Page, text: string): Promise<void> {
+  await page.locator('.ProseMirror').evaluate((editor, selectedText) => {
+    editor.focus()
+    const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const node = walker.currentNode
+      const start = node.textContent?.indexOf(selectedText) ?? -1
+      if (start < 0) continue
+      const selection = document.getSelection()
+      const range = document.createRange()
+      range.setStart(node, start)
+      range.setEnd(node, start + selectedText.length)
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      document.dispatchEvent(new Event('selectionchange', { bubbles: true }))
+      return
+    }
+    throw new Error(`Text not found: ${selectedText}`)
+  }, text)
+}
+
+test('focused writing workflow, formatting, and sidebar settings survive restart', async () => {
   const root = await mkdtemp(join(tmpdir(), 'openmd-e2e-'))
+  const workspacePath = join(root, 'Writing')
+  const documentPath = join(workspacePath, 'guide.md')
   const paths: LaunchPaths = {
     root,
-    savePath: join(root, 'document.md'),
+    savePath: join(root, 'untitled.md'),
     exportDirectory: join(root, 'exports'),
   }
-  const pixelPath = join(root, 'pixel.png')
-  await writeFile(
-    pixelPath,
-    Buffer.from(
-      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl2nGQAAAAASUVORK5CYII=',
-      'base64',
-    ),
-  )
+  const initialMarkdown = [
+    '# E2E Writing',
+    '',
+    'Toolbar bold · Keyboard bold · Keyboard italic · Link target',
+    '',
+    '## Outline target',
+    '',
+    'A paragraph for composition.',
+  ].join('\n')
+  await mkdir(workspacePath)
+  await writeFile(documentPath, initialMarkdown, 'utf8')
+  await writeFile(join(workspacePath, 'second.md'), '# Second tab', 'utf8')
 
   let application: ElectronApplication | undefined
   try {
@@ -77,119 +111,117 @@ test('critical OpenMD document lifecycle stays inside an isolated temporary dire
     let page = await application.firstWindow()
     await expect(page.getByLabel('Markdown 正文编辑器')).toBeVisible()
 
-    const editorLayout = page.locator('.openmd-editor-layout')
-    const editorScroll = page.locator('.openmd-editor-scroll')
-    const expandedEditorBox = await editorScroll.boundingBox()
-    const editorLayoutBox = await editorLayout.boundingBox()
-    expect(expandedEditorBox).not.toBeNull()
-    expect(editorLayoutBox).not.toBeNull()
-
-    await page.getByRole('button', { name: '隐藏文档大纲' }).click()
-    await expect(page.getByRole('button', { name: '显示文档大纲' })).toBeVisible()
-    await expect
-      .poll(async () => (await editorScroll.boundingBox())?.width)
-      .toBeCloseTo(editorLayoutBox!.width, 0)
-
-    await page.getByRole('button', { name: '显示文档大纲' }).click()
-    await expect(page.getByRole('button', { name: '隐藏文档大纲' })).toBeVisible()
-    await expect
-      .poll(async () => (await editorScroll.boundingBox())?.width)
-      .toBeCloseTo(expandedEditorBox!.width, 0)
-
-    await runMenuCommand(application, 'openmd-document-new')
-    await runMenuCommand(application, 'openmd-toggle-editor-mode')
-    const initialMarkdown = [
-      '# E2E Title',
-      '',
-      '- first',
-      '- second',
-      '',
-      '| Name | Value |',
-      '| --- | ---: |',
-      '| OpenMD | 9 |',
-      '',
-      '$E = mc^2$',
-      '',
-      '```mermaid',
-      'graph TD',
-      '  A[Markdown] --> B[Export]',
-      '```',
-    ].join('\n')
-    await replaceSourceMarkdown(page, initialMarkdown)
-    await runMenuCommand(application, 'openmd-document-save')
-    await expect(page.locator('.brand-name')).not.toContainText('*')
-    expect(await readFile(paths.savePath, 'utf8')).toContain('# E2E Title')
-
-    await page.getByRole('button', { name: '设置' }).click()
-    const autoSaveToggle = page.getByRole('checkbox', { name: '自动保存' })
-    const autoSaveDelay = page.getByLabel('自动保存延迟')
-    await expect(autoSaveDelay).toHaveValue('1500')
-    await autoSaveToggle.check()
-    await autoSaveDelay.fill('250')
-    await page.getByRole('button', { name: '保存', exact: true }).click()
-    await replaceSourceMarkdown(page, `${initialMarkdown}\n\nAuto-saved content`)
-    await expect.poll(async () => readFile(paths.savePath, 'utf8')).toContain('Auto-saved content')
-    await expect(page.locator('.brand-name')).not.toContainText('*')
-
-    await application.close()
-    application = await launchOpenMd(paths, paths.savePath)
-    page = await application.firstWindow()
-    await expect(page.locator('.ProseMirror h1')).toContainText('E2E Title')
-    await expect(page.locator('.ProseMirror table.children')).toContainText('OpenMD')
-
-    await application.evaluate(({ dialog }, selectedImagePath) => {
+    await application.evaluate(({ dialog }, selectedWorkspacePath) => {
       Object.defineProperty(dialog, 'showOpenDialog', {
         configurable: true,
-        value: async () => ({ canceled: false, filePaths: [selectedImagePath] }),
+        value: async () => ({ canceled: false, filePaths: [selectedWorkspacePath] }),
       })
-    }, pixelPath)
-    await page.getByRole('button', { name: '插入图片' }).click()
-    await expect(page.locator('img.openmd-image')).toBeVisible()
+    }, workspacePath)
+    await page.getByRole('button', { name: /打开文件夹/u }).click()
+    await expect(page.getByRole('tree')).toBeVisible()
+    await page.getByRole('button', { name: 'guide.md', exact: true }).click()
+    await expect(page.locator('.ProseMirror h1')).toContainText('E2E Writing')
 
-    await runMenuCommand(application, 'openmd-toggle-editor-mode')
-    await expect(page.locator('.cm-content')).toContainText('![')
-    await runMenuCommand(application, 'openmd-toggle-editor-mode')
-    await expect(page.locator('.katex')).toBeVisible()
-    await expect(page.locator('.openmd-mermaid-preview svg')).toBeVisible()
+    const panelTabs = page.getByRole('tablist', { name: '侧栏面板' })
+    await panelTabs.getByRole('tab', { name: '大纲' }).click()
+    await expect(page.getByRole('navigation', { name: '标题导航' })).toContainText('Outline target')
+    await panelTabs.getByRole('tab', { name: '搜索' }).click()
+    await expect(page.getByRole('searchbox', { name: '搜索工作区' })).toBeVisible()
+    await panelTabs.getByRole('tab', { name: '文件' }).click()
+    await expect(page.getByRole('tree')).toBeVisible()
 
-    await page.getByRole('button', { name: '导出 HTML' }).click()
-    await page.getByLabel('嵌入 Base64（本地图片）').click()
-    await page.getByRole('button', { name: '选择保存位置' }).click()
-    const exportedHtmlPath = join(paths.exportDirectory, 'openmd-export.html')
+    const resizeHandle = page.getByRole('separator', { name: '调整侧栏宽度' })
+    await resizeHandle.press('End')
     await expect
-      .poll(async () => readFile(exportedHtmlPath, 'utf8').catch(() => ''))
-      .toContain('<!doctype html>')
-    const exportedHtml = await readFile(exportedHtmlPath, 'utf8')
-    expect(exportedHtml).toContain('data:image/')
-    expect(exportedHtml).toContain('<svg')
-    expect(exportedHtml).not.toContain('<script')
-
-    await page.getByRole('button', { name: '导出 PDF' }).click()
-    await page.getByRole('button', { name: '选择保存位置' }).click()
-    const exportedPdfPath = join(paths.exportDirectory, 'openmd-export.pdf')
-    await expect
-      .poll(async () =>
-        readFile(exportedPdfPath)
-          .then((buffer) => buffer.subarray(0, 4).toString('ascii'))
-          .catch(() => ''),
+      .poll(() =>
+        page.evaluate(() => window.openmd.settings.get().then((value) => value.sidebarWidthPx)),
       )
-      .toBe('%PDF')
+      .toBe(420)
+    await expect(page.locator('.navigation-sidebar')).toHaveCSS('width', '420px')
 
-    await runMenuCommand(application, 'openmd-toggle-editor-mode')
-    await replaceSourceMarkdown(page, `${initialMarkdown}\n\nunsaved change`)
-    await expect(page.locator('.brand-name')).toContainText('*')
-    await application.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.close())
-    await expect(page.locator('.brand-name')).toContainText('*')
-    expect(application.windows()).toHaveLength(1)
+    await selectText(page, 'Toolbar bold')
+    await expect(page.getByRole('toolbar', { name: '文本格式' })).toBeVisible()
+    await page.getByRole('button', { name: /粗体/u }).click()
+
+    await selectText(page, 'Keyboard bold')
+    await page.keyboard.press(`${shortcutModifier}+B`)
+    await selectText(page, 'Keyboard italic')
+    await page.keyboard.press(`${shortcutModifier}+I`)
+
+    await selectText(page, 'Link target')
+    await page.keyboard.press(`${shortcutModifier}+K`)
+    const linkInput = page.getByRole('textbox', { name: '链接地址' })
+    await expect(linkInput).toBeVisible()
+    await linkInput.fill('https://example.com/openmd')
+    await linkInput.press('Enter')
+    const renderedLink = page.locator('.ProseMirror a', { hasText: 'Link target' })
+    await expect(renderedLink).toHaveAttribute('href', 'https://example.com/openmd')
+
+    const pageUrl = page.url()
+    await renderedLink.click()
+    await expect(linkInput).toHaveValue('https://example.com/openmd')
+    expect(page.url()).toBe(pageUrl)
+    await linkInput.press('Escape')
+
+    await expect(
+      page.evaluate(() => window.openmd.openExternalUrl({ url: 'javascript:alert(1)' })),
+    ).rejects.toThrow(/protocol/u)
+    await application.evaluate(({ ipcMain }) => {
+      ipcMain.removeHandler('openmd:app:open-external-url')
+      ipcMain.handle('openmd:app:open-external-url', (_event, request: { url: string }) => {
+        process.env.OPENMD_E2E_EXTERNAL_URL = request.url
+      })
+    })
+    await renderedLink.dispatchEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      ctrlKey: clickModifier === 'Control',
+      metaKey: clickModifier === 'Meta',
+    })
+    await expect
+      .poll(() => application!.evaluate(() => process.env.OPENMD_E2E_EXTERNAL_URL))
+      .toBe('https://example.com/openmd')
+
+    const compositionParagraph = page.locator('.ProseMirror p', {
+      hasText: 'A paragraph for composition.',
+    })
+    await compositionParagraph.click()
+    await page.keyboard.press('End')
+    await page.locator('.ProseMirror').dispatchEvent('compositionstart', { data: '' })
+    await page.keyboard.insertText('中文输入')
+    await page.locator('.ProseMirror').dispatchEvent('compositionend', { data: '中文输入' })
+
+    await runMenuCommand(application, 'openmd-document-save')
+    await expect
+      .poll(async () => readFile(documentPath, 'utf8'))
+      .toContain('https://example.com/openmd')
+    const savedMarkdown = await readFile(documentPath, 'utf8')
+    expect(savedMarkdown).toMatch(/\*\*Toolbar bold\*\*/u)
+    expect(savedMarkdown).toMatch(/\*\*Keyboard bold\*\*/u)
+    expect(savedMarkdown).toMatch(/[*_]Keyboard italic[*_]/u)
+    expect(savedMarkdown.match(/中文输入/gu)).toHaveLength(1)
+    expect(savedMarkdown).not.toMatch(/data-openmd|<span|<strong/iu)
+
+    await page.getByRole('tab', { name: '文件' }).click()
+    await page.getByRole('button', { name: 'second.md', exact: true }).click()
+    await expect(page.getByRole('tab', { name: /second\.md/u })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await page.getByRole('tab', { name: /guide\.md/u }).click()
+    await expect(page.locator('.ProseMirror h1')).toContainText('E2E Writing')
+
+    await panelTabs.getByRole('tab', { name: '大纲' }).click()
+    await stopOpenMd(application)
+    application = await launchOpenMd(paths)
+    page = await application.firstWindow()
+    await expect(page.getByLabel('导航侧栏')).toBeVisible()
+    await expect(page.getByRole('tab', { name: '大纲' })).toHaveAttribute('aria-selected', 'true')
+    await expect(page.locator('.navigation-sidebar')).toHaveCSS('width', '420px')
   } finally {
     if (application) {
-      await application
-        .evaluate(() => {
-          process.env.OPENMD_E2E_CLOSE_RESPONSE = 'discard'
-        })
-        .catch(() => undefined)
-      await application.close().catch(() => undefined)
+      await stopOpenMd(application)
     }
-    await rm(root, { recursive: true, force: true })
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })

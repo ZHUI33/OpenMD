@@ -37,6 +37,9 @@ describe('settings defaults and migration', () => {
       imageResourceDirectoryRule: 'custom',
       imageResourceDirectory: 'media\\images',
       showTextFiles: true,
+      sidebarVisible: true,
+      sidebarWidth: 999,
+      sidebarPanel: 'outline',
     })
 
     expect(settings).toMatchObject({
@@ -54,6 +57,9 @@ describe('settings defaults and migration', () => {
       imageAssetDirectoryRule: 'custom',
       customImageAssetDirectory: 'media/images',
       showTextFiles: true,
+      sidebarVisible: true,
+      sidebarWidthPx: 420,
+      sidebarPanel: 'outline',
     })
   })
 
@@ -67,6 +73,21 @@ describe('settings defaults and migration', () => {
     expect(() => applySettingsUpdate(DEFAULT_SETTINGS, { editorFontSizePx: 2 })).toThrow(
       'editorFontSizePx',
     )
+    expect(() => applySettingsUpdate(DEFAULT_SETTINGS, { sidebarWidthPx: 800 })).toThrow(
+      'sidebarWidthPx',
+    )
+    expect(() => applySettingsUpdate(DEFAULT_SETTINGS, { sidebarPanel: 'history' })).toThrow(
+      'sidebar panel',
+    )
+  })
+
+  it('migrates schema 3 settings with safe sidebar defaults', () => {
+    expect(migrateSettings({ schemaVersion: 3, theme: 'light' })).toMatchObject({
+      schemaVersion: SETTINGS_SCHEMA_VERSION,
+      sidebarVisible: false,
+      sidebarWidthPx: 280,
+      sidebarPanel: 'files',
+    })
   })
 })
 
@@ -90,6 +111,9 @@ describe('settings service persistence', () => {
       defaultEditorMode: 'source',
       autoSave: true,
       autoSaveDelayMs: 900,
+      sidebarVisible: true,
+      sidebarWidthPx: 336,
+      sidebarPanel: 'search',
     })
 
     const reloaded = await new SettingsService(settingsPath).getSettings()
@@ -98,6 +122,9 @@ describe('settings service persistence', () => {
       defaultEditorMode: 'source',
       autoSave: true,
       autoSaveDelayMs: 900,
+      sidebarVisible: true,
+      sidebarWidthPx: 336,
+      sidebarPanel: 'search',
     })
     expect(JSON.parse(await readFile(settingsPath, 'utf8'))).toEqual(reloaded)
   })

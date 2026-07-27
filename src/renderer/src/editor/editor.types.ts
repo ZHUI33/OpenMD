@@ -1,4 +1,5 @@
 import type { RendererImagesApi } from './image-feature'
+import type { OutlineItem } from './outline-feature'
 
 export type EditorMode = 'visual' | 'source'
 
@@ -34,6 +35,7 @@ export interface OpenMdEditorHandle extends EditorDocumentAdapter {
   getScrollPosition?(): number
   setScrollPosition?(position: number): void
   revealLine?(line: number): void
+  scrollToHeading?(id: string): boolean
   whenIdle(): Promise<void>
 }
 
@@ -52,4 +54,7 @@ export interface OpenMdEditorProps {
   documentPath?: string
   imagesApi?: RendererImagesApi
   onEnsureDocumentSaved?: () => Promise<string | undefined>
+  onOutlineChange?: (outline: readonly OutlineItem[]) => void
+  onActiveHeadingChange?: (id: string | null) => void
+  onError?: (message: string) => void
 }

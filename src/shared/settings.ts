@@ -1,7 +1,8 @@
-export const SETTINGS_SCHEMA_VERSION = 3
+export const SETTINGS_SCHEMA_VERSION = 4
 
 export const BUILT_IN_THEMES = ['system', 'light', 'dark'] as const
 export const EDITOR_MODES = ['visual', 'source'] as const
+export const SIDEBAR_PANELS = ['files', 'search', 'outline'] as const
 export const IMAGE_ASSET_DIRECTORY_RULES = [
   'document-name',
   'assets',
@@ -13,6 +14,7 @@ export type BuiltInTheme = (typeof BUILT_IN_THEMES)[number]
 export type UserThemeId = `user:${string}`
 export type ThemeSelection = BuiltInTheme | UserThemeId
 export type DefaultEditorMode = (typeof EDITOR_MODES)[number]
+export type SidebarPanel = (typeof SIDEBAR_PANELS)[number]
 export type ImageAssetDirectoryRule = (typeof IMAGE_ASSET_DIRECTORY_RULES)[number]
 
 export interface AutoSaveSettings {
@@ -36,6 +38,9 @@ export interface AppSettings {
   imageAssetDirectoryRule: ImageAssetDirectoryRule
   customImageAssetDirectory: string
   showTextFiles: boolean
+  sidebarVisible: boolean
+  sidebarWidthPx: number
+  sidebarPanel: SidebarPanel
 }
 
 export type AppSettingsUpdate = Partial<Omit<AppSettings, 'schemaVersion'>>
@@ -45,6 +50,7 @@ export const SETTINGS_LIMITS = Object.freeze({
   editorFontSizePx: Object.freeze({ min: 10, max: 48 }),
   editorLineHeight: Object.freeze({ min: 1, max: 3 }),
   editorMaxWidthPx: Object.freeze({ min: 480, max: 2_400 }),
+  sidebarWidthPx: Object.freeze({ min: 220, max: 420 }),
 })
 
 export const DEFAULT_SETTINGS: Readonly<AppSettings> = Object.freeze({
@@ -64,6 +70,9 @@ export const DEFAULT_SETTINGS: Readonly<AppSettings> = Object.freeze({
   imageAssetDirectoryRule: 'document-name',
   customImageAssetDirectory: 'assets',
   showTextFiles: false,
+  sidebarVisible: false,
+  sidebarWidthPx: 280,
+  sidebarPanel: 'files',
 })
 
 const SETTINGS_KEYS = new Set<string>([
@@ -81,6 +90,9 @@ const SETTINGS_KEYS = new Set<string>([
   'imageAssetDirectoryRule',
   'customImageAssetDirectory',
   'showTextFiles',
+  'sidebarVisible',
+  'sidebarWidthPx',
+  'sidebarPanel',
 ])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -222,6 +234,18 @@ export function migrateSettings(value: unknown): AppSettings {
       typeof source.showTextFiles === 'boolean'
         ? source.showTextFiles
         : DEFAULT_SETTINGS.showTextFiles,
+    sidebarVisible:
+      typeof source.sidebarVisible === 'boolean'
+        ? source.sidebarVisible
+        : DEFAULT_SETTINGS.sidebarVisible,
+    sidebarWidthPx: clampNumber(
+      source.sidebarWidthPx ?? source.sidebarWidth,
+      DEFAULT_SETTINGS.sidebarWidthPx,
+      SETTINGS_LIMITS.sidebarWidthPx,
+    ),
+    sidebarPanel: isOneOf(source.sidebarPanel, SIDEBAR_PANELS)
+      ? source.sidebarPanel
+      : DEFAULT_SETTINGS.sidebarPanel,
   }
 }
 
@@ -265,6 +289,7 @@ export function parseSettingsUpdate(value: unknown): AppSettingsUpdate {
     'sourceLineNumbers',
     'sourceLineWrapping',
     'showTextFiles',
+    'sidebarVisible',
   ] as const) {
     if (field in value) {
       if (typeof value[field] !== 'boolean') throw new TypeError(`${field} must be a boolean.`)
@@ -298,6 +323,16 @@ export function parseSettingsUpdate(value: unknown): AppSettingsUpdate {
       SETTINGS_LIMITS.editorMaxWidthPx,
     )
     update.editorMaxWidthPx = value.editorMaxWidthPx
+  }
+  if ('sidebarWidthPx' in value) {
+    assertNumberInRange(value.sidebarWidthPx, 'sidebarWidthPx', SETTINGS_LIMITS.sidebarWidthPx)
+    update.sidebarWidthPx = value.sidebarWidthPx
+  }
+  if ('sidebarPanel' in value) {
+    if (!isOneOf(value.sidebarPanel, SIDEBAR_PANELS)) {
+      throw new TypeError('Invalid sidebar panel.')
+    }
+    update.sidebarPanel = value.sidebarPanel
   }
   if ('editorFontFamily' in value) {
     const fontFamily = safeFontFamily(value.editorFontFamily, '')

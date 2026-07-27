@@ -14,6 +14,7 @@ import type {
   OpenDocumentRequest,
   OpenDocumentResult,
   OpenMdApi,
+  OpenExternalUrlRequest,
   ResolveCloseRequest,
   SaveDocumentRequest,
   SaveDocumentResult,
@@ -39,6 +40,8 @@ import type { LoadedUserTheme, UserThemeInfo } from '../shared/theme'
 
 export const openMdApi: OpenMdApi = Object.freeze({
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo) as Promise<AppInfo>,
+  openExternalUrl: (request: OpenExternalUrlRequest) =>
+    ipcRenderer.invoke(IPC_CHANNELS.appOpenExternalUrl, request) as Promise<void>,
   documents: Object.freeze({
     ready: () => ipcRenderer.invoke(IPC_CHANNELS.documentsReady) as Promise<void>,
     newDocument: () => ipcRenderer.invoke(IPC_CHANNELS.documentsNew) as Promise<NewDocumentResult>,

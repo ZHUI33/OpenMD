@@ -5,9 +5,7 @@ import type { OutlineItem } from '../editor/outline-feature'
 interface OutlinePanelProps {
   activeId: string | null
   items: readonly OutlineItem[]
-  visible: boolean
   onNavigate: (id: string) => void
-  onVisibleChange: (visible: boolean) => void
 }
 
 function OutlineBranch({
@@ -39,45 +37,17 @@ function OutlineBranch({
   )
 }
 
-export function OutlinePanel({
-  activeId,
-  items,
-  visible,
-  onNavigate,
-  onVisibleChange,
-}: OutlinePanelProps): JSX.Element {
+export function OutlinePanel({ activeId, items, onNavigate }: OutlinePanelProps): JSX.Element {
   return (
-    <>
-      <aside className="openmd-outline-panel" aria-label="文档大纲" hidden={!visible}>
-        <div className="openmd-outline-header">
-          <span>文档大纲</span>
-          <button
-            type="button"
-            className="openmd-outline-toggle"
-            aria-label="隐藏文档大纲"
-            onClick={() => onVisibleChange(false)}
-          >
-            收起
-          </button>
-        </div>
-        <nav className="openmd-outline-nav" aria-label="标题导航">
-          {items.length > 0 ? (
-            <OutlineBranch activeId={activeId} items={items} onNavigate={onNavigate} />
-          ) : (
-            <p className="openmd-outline-empty">暂无标题</p>
-          )}
-        </nav>
-      </aside>
-      <button
-        type="button"
-        className="openmd-outline-show"
-        hidden={visible}
-        aria-label="显示文档大纲"
-        aria-expanded={visible}
-        onClick={() => onVisibleChange(true)}
-      >
-        大纲
-      </button>
-    </>
+    <section className="openmd-outline-panel" aria-label="文档大纲">
+      <div className="sidebar-panel-heading">文档大纲</div>
+      <nav className="openmd-outline-nav" aria-label="标题导航">
+        {items.length > 0 ? (
+          <OutlineBranch activeId={activeId} items={items} onNavigate={onNavigate} />
+        ) : (
+          <p className="openmd-outline-empty">暂无标题</p>
+        )}
+      </nav>
+    </section>
   )
 }

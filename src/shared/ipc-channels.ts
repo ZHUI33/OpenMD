@@ -1,5 +1,6 @@
 export const IPC_CHANNELS = Object.freeze({
   appGetInfo: 'openmd:app:get-info',
+  appOpenExternalUrl: 'openmd:app:open-external-url',
   documentsReady: 'openmd:documents:ready',
   documentsNew: 'openmd:documents:new',
   documentsOpen: 'openmd:documents:open',

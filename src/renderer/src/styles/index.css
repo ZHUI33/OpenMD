@@ -21,8 +21,8 @@ html {
 
 body {
   margin: 0;
-  min-width: 800px;
-  min-height: 600px;
+  min-width: 520px;
+  min-height: 420px;
   overflow: hidden;
 }
 
@@ -33,7 +33,7 @@ select {
 
 .app-shell {
   display: grid;
-  grid-template-rows: 56px minmax(0, 1fr) 28px;
+  grid-template-rows: 48px minmax(0, 1fr) 24px;
   height: 100%;
   background: var(--background);
   color: var(--foreground);
@@ -43,7 +43,7 @@ select {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 20px;
+  padding: 0 12px;
   border-bottom: 1px solid var(--border);
   background: color-mix(in srgb, var(--surface) 92%, transparent);
   user-select: none;
@@ -53,24 +53,24 @@ select {
   display: flex;
   min-width: 0;
   align-items: center;
-  gap: 10px;
-  font-weight: 700;
+  gap: 8px;
+  font-weight: 650;
   letter-spacing: -0.01em;
 }
 
 .brand-mark {
   display: grid;
-  width: 28px;
-  height: 28px;
+  width: 25px;
+  height: 25px;
   place-items: center;
-  border-radius: 8px;
+  border-radius: var(--radius-control);
   background: #111c38;
   box-shadow: inset 0 0 0 1px rgb(255 255 255 / 10%);
 }
 
 .brand-mark svg {
-  width: 21px;
-  height: 21px;
+  width: 18px;
+  height: 18px;
   fill: none;
   stroke: #f8fafc;
   stroke-width: 3.1;
@@ -86,7 +86,7 @@ select {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 15px;
+  font-size: 13px;
 }
 
 .theme-control {
@@ -115,7 +115,7 @@ select {
 .title-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--space-1);
 }
 
 .insert-image-button {
@@ -150,19 +150,10 @@ select {
 
 .openmd-editor-layout {
   position: relative;
-  display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  display: block;
   width: 100%;
   height: 100%;
   min-height: 0;
-}
-
-.openmd-editor-layout[data-outline-visible='false'] {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.openmd-editor-layout[data-mode='source'] {
-  grid-template-columns: minmax(0, 1fr);
 }
 
 .openmd-editor-layout[data-switching='true'] > :last-child {
@@ -198,60 +189,7 @@ select {
   min-height: 0;
   flex-direction: column;
   overflow: hidden;
-  border-right: 1px solid var(--border);
-  background: color-mix(in srgb, var(--surface) 88%, var(--background));
-}
-
-.openmd-outline-panel[hidden],
-.openmd-outline-show[hidden] {
-  display: none;
-}
-
-.openmd-outline-header {
-  display: flex;
-  min-height: 46px;
-  padding: 0 12px 0 16px;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid var(--border);
-  color: var(--foreground);
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.openmd-outline-toggle,
-.openmd-outline-show {
-  border: 1px solid var(--border);
-  border-radius: 7px;
-  background: var(--surface);
-  color: var(--muted);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.openmd-outline-toggle {
-  height: 28px;
-  padding: 0 8px;
-}
-
-.openmd-outline-toggle:hover,
-.openmd-outline-toggle:focus-visible,
-.openmd-outline-show:hover,
-.openmd-outline-show:focus-visible {
-  border-color: var(--primary);
-  outline: none;
-  background: var(--primary-soft);
-  color: var(--primary);
-}
-
-.openmd-outline-show {
-  position: absolute;
-  z-index: 40;
-  top: 14px;
-  left: 14px;
-  height: 30px;
-  padding: 0 10px;
-  box-shadow: var(--shadow);
+  background: transparent;
 }
 
 .openmd-outline-nav {
@@ -312,7 +250,7 @@ select {
   width: min(100%, var(--editor-max-width));
   min-height: 100%;
   margin: 0 auto;
-  padding: 56px 0 120px;
+  padding: clamp(38px, 6vh, 64px) 0 120px;
 }
 
 .openmd-editor .milkdown {
@@ -1137,6 +1075,142 @@ select {
   text-align: right;
 }
 
+.openmd-format-toolbar {
+  position: fixed;
+  z-index: 2400;
+  display: flex;
+  min-height: 34px;
+  padding: 3px;
+  align-items: center;
+  gap: 1px;
+  border: 1px solid var(--border-strong);
+  border-radius: 7px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-menu);
+  color: var(--foreground);
+}
+
+.openmd-format-toolbar[hidden] {
+  display: none;
+}
+
+.openmd-format-button {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: var(--radius-control);
+  outline: none;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+}
+
+.openmd-format-button:hover:not(:disabled) {
+  background: var(--control-hover);
+  color: var(--foreground);
+}
+
+.openmd-format-button:focus-visible {
+  box-shadow: 0 0 0 var(--focus-ring-size) var(--focus-ring);
+  color: var(--foreground);
+}
+
+.openmd-format-button[data-active='true'],
+.openmd-format-button[aria-pressed='true'] {
+  background: var(--control-active);
+  color: var(--primary);
+}
+
+.openmd-format-button:disabled {
+  cursor: default;
+  opacity: 0.38;
+}
+
+.openmd-format-separator {
+  width: 1px;
+  height: 18px;
+  margin: 0 3px;
+  background: var(--border);
+}
+
+.openmd-link-editor {
+  display: grid;
+  min-width: min(390px, calc(100vw - 24px));
+  margin-left: 4px;
+  grid-template-columns: minmax(150px, 1fr) auto auto auto;
+  align-items: center;
+  gap: 2px;
+}
+
+.openmd-link-editor[hidden] {
+  display: none;
+}
+
+.openmd-link-editor input {
+  width: 100%;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  outline: none;
+  background: var(--background);
+  color: var(--foreground);
+  font: 12px/1.4 var(--editor-font-family);
+}
+
+.openmd-link-editor input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 var(--focus-ring-size) var(--focus-ring);
+}
+
+.openmd-link-editor input[aria-invalid='true'] {
+  border-color: var(--danger);
+}
+
+.openmd-link-message {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  padding: 4px 7px;
+  border-radius: var(--radius-control);
+  background: var(--danger-soft);
+  color: var(--danger);
+  font-size: 11px;
+}
+
+.openmd-link-message:empty {
+  display: none;
+}
+
+.openmd-editor .ProseMirror > :first-child {
+  margin-top: 0;
+}
+
+.openmd-editor .ProseMirror h1 {
+  margin: 1.45em 0 0.65em;
+  font-size: 2em;
+}
+
+.openmd-editor .ProseMirror h2 {
+  margin: 1.4em 0 0.6em;
+  font-size: 1.55em;
+}
+
+.openmd-editor .ProseMirror h3 {
+  margin: 1.3em 0 0.55em;
+  font-size: 1.28em;
+}
+
+.openmd-editor .ProseMirror p,
+.openmd-editor .ProseMirror ul,
+.openmd-editor .ProseMirror ol,
+.openmd-editor .ProseMirror blockquote {
+  margin-block: 0.72em;
+}
+
 @media (max-width: 900px) {
   body {
     min-width: 0;
@@ -1144,5 +1218,9 @@ select {
 
   .openmd-editor {
     padding-top: 36px;
+  }
+
+  .openmd-editor-scroll {
+    padding-inline: clamp(20px, 5vw, 48px);
   }
 }

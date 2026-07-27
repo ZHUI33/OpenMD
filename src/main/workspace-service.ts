@@ -20,7 +20,6 @@ import type {
 import {
   createWorkspaceDirectory,
   createWorkspaceMarkdownFile,
-  deleteWorkspaceEntry,
   listWorkspaceDirectory,
   readWorkspaceFile,
   renameWorkspaceEntry,
@@ -39,10 +38,37 @@ interface WorkspaceState extends WorkspaceInfo {
 
 const DOCUMENT_EXTENSIONS = new Set(['.md', '.markdown', '.txt'])
 
+export interface WorkspaceServiceOptions {
+  trashItem?: (filePath: string) => Promise<void>
+}
+
+export async function moveWorkspaceEntryToTrash(
+  rootPath: string,
+  request: WorkspacePathRequest,
+  trashItem: (filePath: string) => Promise<void>,
+): Promise<void> {
+  const entry = await resolveWorkspaceEntry(rootPath, request)
+  try {
+    await trashItem(entry.filePath)
+  } catch (error) {
+    const detail = error instanceof Error ? error.message.trim() : ''
+    throw new WorkspacePathError(
+      `无法将“${basename(entry.filePath)}”移入系统回收站，原项目没有被删除。${
+        detail ? ` ${detail}` : ''
+      }`,
+    )
+  }
+}
+
 export class WorkspaceService {
   private readonly workspaces = new Map<number, WorkspaceState>()
   private readonly activeSearches = new Map<number, AbortController>()
   private readonly attachedWindows = new Set<number>()
+  private readonly trashItem: (filePath: string) => Promise<void>
+
+  constructor(options: WorkspaceServiceOptions = {}) {
+    this.trashItem = options.trashItem ?? ((filePath) => shell.trashItem(filePath))
+  }
 
   async open(parentWindow: BrowserWindow): Promise<OpenWorkspaceResult> {
     const selection = await dialog.showOpenDialog(parentWindow, {
@@ -107,20 +133,7 @@ export class WorkspaceService {
     request: WorkspacePathRequest,
   ): Promise<DeleteWorkspaceEntryResult> {
     const rootPath = this.getRequiredRoot(parentWindow)
-    const entry = await resolveWorkspaceEntry(rootPath, request)
-    const confirmation = await dialog.showMessageBox(parentWindow, {
-      type: 'warning',
-      title: '删除文件',
-      message: `确定要删除“${basename(entry.filePath)}”吗？`,
-      detail: '此操作无法由 OpenMD 撤销。',
-      buttons: ['删除', '取消'],
-      defaultId: 1,
-      cancelId: 1,
-      noLink: true,
-    })
-    if (confirmation.response !== 0) return { deleted: false }
-
-    await deleteWorkspaceEntry(rootPath, request)
+    await moveWorkspaceEntryToTrash(rootPath, request, this.trashItem)
     return { deleted: true }
   }
 

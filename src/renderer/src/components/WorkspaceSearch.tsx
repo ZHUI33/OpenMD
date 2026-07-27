@@ -6,6 +6,7 @@ import type {
   WorkspaceSearchMatch,
   WorkspaceSearchResult,
 } from '../../../shared/desktop-api.types'
+import { Icon } from './Icon'
 
 export interface WorkspaceSearchProps {
   api: WorkspaceApi
@@ -79,8 +80,8 @@ export const WorkspaceSearch = memo(function WorkspaceSearch({
     <section className="workspace-search" aria-label="工作区搜索">
       <header className="search-header">
         <strong>全文搜索</strong>
-        <button type="button" aria-label="关闭搜索" onClick={onClose}>
-          ×
+        <button type="button" aria-label="隐藏侧栏" title="隐藏侧栏" onClick={onClose}>
+          <Icon name="close" />
         </button>
       </header>
       <div className="search-controls">

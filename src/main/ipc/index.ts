@@ -1,7 +1,7 @@
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
 
-import { app, BrowserWindow, ipcMain } from 'electron'
+import { app, BrowserWindow, ipcMain, shell } from 'electron'
 import type { IpcMainInvokeEvent } from 'electron'
 
 import type {
@@ -10,6 +10,7 @@ import type {
   ExportHtmlRequest,
   ExportPdfRequest,
   OpenDocumentRequest,
+  OpenExternalUrlRequest,
   ResolveImageRequest,
   ResolveCloseRequest,
   SaveDocumentRequest,
@@ -61,6 +62,24 @@ export function getTrustedSenderWindow(event: IpcMainInvokeEvent): BrowserWindow
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:'])
+
+export function parseOpenExternalUrlRequest(value: unknown): OpenExternalUrlRequest {
+  if (!isRecord(value) || typeof value.url !== 'string' || value.url.length > 8_192) {
+    throw new TypeError('Invalid external URL request.')
+  }
+  let url: URL
+  try {
+    url = new URL(value.url)
+  } catch {
+    throw new TypeError('Invalid external URL.')
+  }
+  if (!ALLOWED_EXTERNAL_PROTOCOLS.has(url.protocol)) {
+    throw new TypeError('External URL protocol is not allowed.')
+  }
+  return { url: url.href }
 }
 
 function parseOpenRequest(value: unknown): OpenDocumentRequest {
@@ -308,6 +327,13 @@ export function registerIpcHandlers(
       version: app.getVersion(),
       platform: process.platform,
     }
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.appOpenExternalUrl)
+  ipcMain.handle(IPC_CHANNELS.appOpenExternalUrl, async (event, value: unknown) => {
+    getTrustedSenderWindow(event)
+    const request = parseOpenExternalUrlRequest(value)
+    await shell.openExternal(request.url)
   })
 
   ipcMain.removeHandler(IPC_CHANNELS.documentsNew)

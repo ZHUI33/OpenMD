@@ -7,6 +7,10 @@ export interface AppInfo {
   platform: string
 }
 
+export interface OpenExternalUrlRequest {
+  url: string
+}
+
 export type HtmlImageStrategy = 'relative' | 'base64'
 export type PdfPageSize = 'A4' | 'Letter'
 
@@ -282,6 +286,7 @@ export interface DocumentsApi {
 
 export interface OpenMdApi {
   getAppInfo: () => Promise<AppInfo>
+  openExternalUrl: (request: OpenExternalUrlRequest) => Promise<void>
   documents: DocumentsApi
   images: ImagesApi
   workspace: WorkspaceApi

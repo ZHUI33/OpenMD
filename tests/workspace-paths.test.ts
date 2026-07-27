@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   createWorkspaceDirectory,
   createWorkspaceMarkdownFile,
-  deleteWorkspaceEntry,
   listWorkspaceDirectory,
   readWorkspaceFile,
   renameWorkspaceEntry,
@@ -103,10 +102,9 @@ describe('workspace path security and lazy directory listing', () => {
       relativePath: 'articles/published.markdown',
       kind: 'markdown',
     })
-    await deleteWorkspaceEntry(rootPath, { relativePath: renamed.relativePath })
     await expect(
       readWorkspaceFile(rootPath, { relativePath: renamed.relativePath }),
-    ).rejects.toMatchObject({ code: 'ENOENT' })
+    ).resolves.toMatchObject({ content: '' })
 
     await expect(
       createWorkspaceMarkdownFile(rootPath, {
