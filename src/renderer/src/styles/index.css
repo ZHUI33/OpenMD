@@ -158,7 +158,7 @@ select {
 }
 
 .openmd-editor-layout[data-outline-visible='false'] {
-  grid-template-columns: 0 minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr);
 }
 
 .openmd-editor-layout[data-mode='source'] {

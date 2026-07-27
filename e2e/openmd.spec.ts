@@ -77,6 +77,25 @@ test('critical OpenMD document lifecycle stays inside an isolated temporary dire
     let page = await application.firstWindow()
     await expect(page.getByLabel('Markdown 正文编辑器')).toBeVisible()
 
+    const editorLayout = page.locator('.openmd-editor-layout')
+    const editorScroll = page.locator('.openmd-editor-scroll')
+    const expandedEditorBox = await editorScroll.boundingBox()
+    const editorLayoutBox = await editorLayout.boundingBox()
+    expect(expandedEditorBox).not.toBeNull()
+    expect(editorLayoutBox).not.toBeNull()
+
+    await page.getByRole('button', { name: '隐藏文档大纲' }).click()
+    await expect(page.getByRole('button', { name: '显示文档大纲' })).toBeVisible()
+    await expect
+      .poll(async () => (await editorScroll.boundingBox())?.width)
+      .toBeCloseTo(editorLayoutBox!.width, 0)
+
+    await page.getByRole('button', { name: '显示文档大纲' }).click()
+    await expect(page.getByRole('button', { name: '隐藏文档大纲' })).toBeVisible()
+    await expect
+      .poll(async () => (await editorScroll.boundingBox())?.width)
+      .toBeCloseTo(expandedEditorBox!.width, 0)
+
     await runMenuCommand(application, 'openmd-document-new')
     await runMenuCommand(application, 'openmd-toggle-editor-mode')
     const initialMarkdown = [
