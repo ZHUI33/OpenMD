@@ -84,11 +84,21 @@ export class WorkspaceService {
     const rootStats = await stat(rootPath)
     if (!rootStats.isDirectory()) throw new WorkspacePathError('所选路径不是文件夹。')
 
+    const workspace = await this.restore(parentWindow, rootPath)
+    return { canceled: false, workspace: { ...workspace } }
+  }
+
+  async restore(parentWindow: BrowserWindow, requestedRootPath: string): Promise<WorkspaceInfo> {
+    const rootPath = await realpath(requestedRootPath)
+    const rootStats = await stat(rootPath)
+    if (!rootStats.isDirectory()) throw new WorkspacePathError('恢复的工作区路径不是文件夹。')
+
     const workspace: WorkspaceState = { name: basename(rootPath), rootPath }
     this.attachWindowCleanup(parentWindow)
     this.abortSearch(parentWindow.webContents.id)
+    this.abortQuickOpen(parentWindow.webContents.id)
     this.workspaces.set(parentWindow.webContents.id, workspace)
-    return { canceled: false, workspace: { ...workspace } }
+    return { ...workspace }
   }
 
   getCurrent(parentWindow: BrowserWindow): WorkspaceInfo | undefined {
@@ -195,6 +205,10 @@ export class WorkspaceService {
 
   cancelQuickOpen(parentWindow: BrowserWindow): void {
     this.abortQuickOpen(parentWindow.webContents.id)
+  }
+
+  cancelSearch(parentWindow: BrowserWindow): void {
+    this.abortSearch(parentWindow.webContents.id)
   }
 
   async isDocumentPathAllowed(parentWindow: BrowserWindow, filePath: string): Promise<boolean> {

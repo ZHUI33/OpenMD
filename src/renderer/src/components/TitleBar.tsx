@@ -15,6 +15,9 @@ export interface TitleBarProps {
   onOpenSettings?: () => void
   onExportHtml?: () => void
   onExportPdf?: () => void
+  onExportPng?: () => void
+  onRepeatExport?: () => void
+  repeatExportDisabled?: boolean
 }
 
 interface IconActionProps {
@@ -59,6 +62,9 @@ export function TitleBar({
   onOpenSettings,
   onExportHtml,
   onExportPdf,
+  onExportPng,
+  onRepeatExport,
+  repeatExportDisabled = true,
 }: TitleBarProps): JSX.Element {
   const activeTab = useEditorTabsStore((state) =>
     state.tabs.find((tab) => tab.id === state.activeTabId),
@@ -79,12 +85,35 @@ export function TitleBar({
       }
     }
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (event.key !== 'Escape') return
-      setMenuOpen(false)
-      menuButtonRef.current?.focus()
+      if (event.key === 'Escape') {
+        setMenuOpen(false)
+        menuButtonRef.current?.focus()
+        return
+      }
+      if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return
+      const items = [
+        ...(menuRef.current?.querySelectorAll<HTMLButtonElement>('[role="menuitem"]') ?? []),
+      ].filter((item) => !item.disabled)
+      if (items.length === 0) return
+      event.preventDefault()
+      const currentIndex = items.indexOf(document.activeElement as HTMLButtonElement)
+      const nextIndex =
+        event.key === 'Home'
+          ? 0
+          : event.key === 'End'
+            ? items.length - 1
+            : event.key === 'ArrowDown'
+              ? (currentIndex + 1 + items.length) % items.length
+              : (currentIndex - 1 + items.length) % items.length
+      items[nextIndex]?.focus()
     }
     window.addEventListener('pointerdown', close, true)
     window.addEventListener('keydown', onKeyDown)
+    queueMicrotask(() =>
+      menuRef.current
+        ?.querySelector<HTMLButtonElement>('[role="menuitem"]:not(:disabled)')
+        ?.focus(),
+    )
     return () => {
       window.removeEventListener('pointerdown', close, true)
       window.removeEventListener('keydown', onKeyDown)
@@ -171,6 +200,19 @@ export function TitleBar({
               <button type="button" role="menuitem" onClick={() => runMenuAction(onExportPdf)}>
                 <Icon name="export" />
                 <span>导出 PDF…</span>
+              </button>
+              <button type="button" role="menuitem" onClick={() => runMenuAction(onExportPng)}>
+                <Icon name="export" />
+                <span>导出长图 PNG…</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={repeatExportDisabled}
+                onClick={() => runMenuAction(onRepeatExport)}
+              >
+                <Icon name="export" />
+                <span>使用上次配置再次导出</span>
               </button>
               <div className="desktop-menu-separator" role="separator" />
               <button type="button" role="menuitem" onClick={() => runMenuAction(onOpenSettings)}>

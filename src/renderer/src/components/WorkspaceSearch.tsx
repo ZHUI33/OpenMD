@@ -43,6 +43,7 @@ export const WorkspaceSearch = memo(function WorkspaceSearch({
     const requestId = ++requestIdRef.current
     const trimmedQuery = query.trim()
     if (!trimmedQuery) {
+      void api.cancelSearch()
       setSearching(false)
       setResult(EMPTY_RESULT)
       setError(undefined)
@@ -73,7 +74,10 @@ export const WorkspaceSearch = memo(function WorkspaceSearch({
         })
     }, 220)
 
-    return () => window.clearTimeout(timer)
+    return () => {
+      window.clearTimeout(timer)
+      void api.cancelSearch()
+    }
   }, [api, caseSensitive, includeTextFiles, query])
 
   return (
@@ -114,6 +118,19 @@ export const WorkspaceSearch = memo(function WorkspaceSearch({
               ? `${result.matches.length} 条结果 · 已检查 ${result.filesSearched} 个文件${result.truncated ? ' · 已达到上限' : ''}`
               : '输入关键词开始搜索'}
       </div>
+      {searching ? (
+        <button
+          className="workspace-search-cancel"
+          type="button"
+          onClick={() => {
+            requestIdRef.current += 1
+            void api.cancelSearch()
+            setSearching(false)
+          }}
+        >
+          取消搜索
+        </button>
+      ) : null}
       <div className="search-results">
         {result.matches.map((match, index) => (
           <button

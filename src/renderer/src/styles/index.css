@@ -39,6 +39,71 @@ select {
   color: var(--foreground);
 }
 
+.milkdown-code-block,
+.openmd-image-node,
+.openmd-mermaid-preview,
+.ProseMirror > table {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 180px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+  }
+}
+
+@media (prefers-contrast: more) {
+  :root {
+    --border: #747474;
+    --border-strong: #3f3f3f;
+    --muted: #505050;
+    --focus-ring: currentColor;
+  }
+
+  :root[data-theme='dark'] {
+    --border: #9a9a9a;
+    --border-strong: #d0d0d0;
+    --muted: #d0d0d0;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    border-width: 2px !important;
+  }
+}
+
+@media (forced-colors: active) {
+  * {
+    forced-color-adjust: auto;
+  }
+
+  :focus-visible {
+    outline: 2px solid Highlight !important;
+    outline-offset: 2px !important;
+  }
+
+  .brand-mark {
+    border: 1px solid ButtonText;
+    background: Canvas;
+  }
+}
+
+:root[data-platform='darwin'] .title-bar {
+  padding-inline: 16px;
+}
+
+:root[data-platform='win32'] .title-bar {
+  font-family: 'Segoe UI Variable', 'Segoe UI', var(--editor-font-family);
+}
+
 .title-bar {
   display: flex;
   align-items: center;

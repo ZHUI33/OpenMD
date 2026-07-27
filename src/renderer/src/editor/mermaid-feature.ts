@@ -102,6 +102,7 @@ class LazyMermaidEngine implements MermaidRenderEngine {
 interface PreviewJob {
   applyPreview: (value: null | string | HTMLElement) => void
   ownerDocument: Document
+  preview: HTMLElement
   source: string
   timer: number | null
   token: string
@@ -388,6 +389,7 @@ export class MermaidPreviewController {
   private readonly jobs = new Map<string, PreviewJob>()
   private readonly jobsByApplyPreview = new Map<PreviewJob['applyPreview'], PreviewJob>()
   private readonly renderHosts = new Set<HTMLElement>()
+  private observer?: IntersectionObserver
   private root?: HTMLElement
   private destroyed = false
   private initialized = false
@@ -430,6 +432,7 @@ export class MermaidPreviewController {
         previousJob.ownerDocument.defaultView?.clearTimeout(previousJob.timer)
         previousJob.timer = null
       }
+      this.observer?.unobserve(previousJob.preview)
       this.jobs.delete(previousJob.token)
     }
 
@@ -443,14 +446,35 @@ export class MermaidPreviewController {
     const job: PreviewJob = {
       applyPreview,
       ownerDocument,
+      preview,
       source,
       timer: null,
       token,
     }
-    job.timer =
-      ownerDocument.defaultView?.setTimeout(() => void this.render(job), this.debounceMs) ?? null
     this.jobs.set(token, job)
     this.jobsByApplyPreview.set(applyPreview, job)
+    const Observer = ownerDocument.defaultView?.IntersectionObserver
+    if (Observer) {
+      this.observer ??= new Observer(
+        (entries) => {
+          for (const entry of entries) {
+            if (!entry.isIntersecting) continue
+            const visibleJob = this.jobs.get(
+              (entry.target as HTMLElement).dataset.openmdMermaidToken ?? '',
+            )
+            if (!visibleJob) continue
+            this.observer?.unobserve(visibleJob.preview)
+            this.schedule(visibleJob)
+          }
+        },
+        { rootMargin: '600px 0px' },
+      )
+      queueMicrotask(() => {
+        if (this.jobs.get(token) === job) this.observer?.observe(preview)
+      })
+    } else {
+      this.schedule(job)
+    }
     return preview
   }
 
@@ -462,6 +486,8 @@ export class MermaidPreviewController {
     }
     this.jobs.clear()
     this.jobsByApplyPreview.clear()
+    this.observer?.disconnect()
+    this.observer = undefined
     for (const host of this.renderHosts) host.remove()
     this.renderHosts.clear()
   }
@@ -476,10 +502,18 @@ export class MermaidPreviewController {
   }
 
   private forgetJob(job: PreviewJob): void {
+    this.observer?.unobserve(job.preview)
     this.jobs.delete(job.token)
     if (this.jobsByApplyPreview.get(job.applyPreview) === job) {
       this.jobsByApplyPreview.delete(job.applyPreview)
     }
+  }
+
+  private schedule(job: PreviewJob): void {
+    if (job.timer !== null) job.ownerDocument.defaultView?.clearTimeout(job.timer)
+    job.timer =
+      job.ownerDocument.defaultView?.setTimeout(() => void this.render(job), this.debounceMs) ??
+      null
   }
 
   private ensureInitialized(): void {

@@ -17,7 +17,9 @@ export interface OpenExternalUrlRequest {
 }
 
 export type HtmlImageStrategy = 'relative' | 'base64'
+export type HtmlExportStyle = 'styled' | 'unstyled'
 export type PdfPageSize = 'A4' | 'Letter'
+export type ExportTheme = 'light' | 'dark'
 
 export interface ExportHtmlRequest {
   documentHtml: string
@@ -36,6 +38,16 @@ export interface ExportPdfRequest extends ExportHtmlRequest {
   pageSize: PdfPageSize
   margins: PdfMargins
   printBackground: boolean
+  theme: ExportTheme
+  headerText: string
+  footerText: string
+  pageNumbers: boolean
+  pageBreakBeforeHeadings: boolean
+}
+
+export interface ExportPngRequest extends ExportHtmlRequest {
+  width: number
+  theme: ExportTheme
 }
 
 export interface ExportDocumentResult {
@@ -87,6 +99,62 @@ export interface ConfirmCloseResult {
 
 export interface ReleaseDocumentRequest {
   filePath: string
+}
+
+export interface RecoveryCursorAnchor {
+  offset?: number
+  headingText?: string
+  blockIndex?: number
+}
+
+export interface RecoveryTabBackup {
+  id: string
+  title: string
+  filePath?: string
+  markdown: string
+  dirty: boolean
+  editorMode: 'visual' | 'source'
+  scrollPosition?: number
+  cursorAnchor?: RecoveryCursorAnchor
+}
+
+export interface SaveRecoverySessionRequest {
+  workspace?: WorkspaceInfo
+  activeTabId?: string
+  tabs: RecoveryTabBackup[]
+}
+
+export interface ClearRecoveryRecordRequest {
+  tabId: string
+}
+
+export interface RecoveryTabSnapshot {
+  id: string
+  title: string
+  originalPath?: string
+  dirty: boolean
+  editorMode: 'visual' | 'source'
+  scrollPosition?: number
+  cursorAnchor?: RecoveryCursorAnchor
+  backedUpAt?: number
+  summary?: string
+  content?: string
+}
+
+export interface RecoverySnapshot {
+  available: boolean
+  workspace?: WorkspaceInfo
+  activeTabId?: string
+  tabs: RecoveryTabSnapshot[]
+}
+
+export interface RecoveryApi {
+  getSnapshot: () => Promise<RecoverySnapshot>
+  saveSession: (request: SaveRecoverySessionRequest) => Promise<void>
+  clearRecord: (request: ClearRecoveryRecordRequest) => Promise<void>
+  restoreWorkspace: () => Promise<WorkspaceInfo | undefined>
+  discard: () => Promise<void>
+  completeSession: () => Promise<void>
 }
 
 export interface RecentFile {
@@ -206,6 +274,7 @@ export interface WorkspaceApi {
   revealEntry: (request: WorkspacePathRequest) => Promise<void>
   copyRelativePath: (request: WorkspacePathRequest) => Promise<void>
   search: (request: WorkspaceSearchRequest) => Promise<WorkspaceSearchResult>
+  cancelSearch: () => Promise<void>
   quickOpen: (request: WorkspaceQuickOpenRequest) => Promise<WorkspaceQuickOpenResult>
   cancelQuickOpen: () => Promise<void>
   onFileChange: (listener: (change: WorkspaceFileChange) => void) => () => void
@@ -287,6 +356,8 @@ export type DocumentCommand =
   | { type: 'save-as' }
   | { type: 'export-html' }
   | { type: 'export-pdf' }
+  | { type: 'export-png' }
+  | { type: 'export-repeat' }
   | { type: 'reload' }
   | { type: 'close'; intent: CloseIntent; requestId: string }
 
@@ -331,11 +402,13 @@ export interface OpenMdApi {
   updateCommandState: (state: AppCommandState) => Promise<void>
   openExternalUrl: (request: OpenExternalUrlRequest) => Promise<void>
   documents: DocumentsApi
+  recovery: RecoveryApi
   images: ImagesApi
   workspace: WorkspaceApi
   settings: SettingsApi
   exports: {
     html: (request: ExportHtmlRequest) => Promise<ExportDocumentResult>
     pdf: (request: ExportPdfRequest) => Promise<ExportDocumentResult>
+    png: (request: ExportPngRequest) => Promise<ExportDocumentResult>
   }
 }

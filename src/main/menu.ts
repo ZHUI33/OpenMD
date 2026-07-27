@@ -71,6 +71,8 @@ export function installApplicationMenu(
     { type: 'separator' },
     commandItem('export-html', sendCommand),
     commandItem('export-pdf', sendCommand),
+    commandItem('export-png', sendCommand),
+    commandItem('export-repeat', sendCommand),
   ]
 
   if (isMac) {

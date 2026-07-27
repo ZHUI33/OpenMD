@@ -1,5 +1,6 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import type { JSX } from 'react'
+import { useDialogFocus } from './use-dialog-focus'
 
 export type FileConflictAction = 'reload' | 'keep'
 
@@ -48,6 +49,8 @@ export function FileConflictDialog({
   onResolve,
 }: FileConflictDialogProps): JSX.Element {
   const [comparing, setComparing] = useState(false)
+  const dialogRef = useRef<HTMLElement>(null)
+  useDialogFocus(dialogRef)
   const comparison = useMemo(
     () =>
       comparing && !deleted
@@ -59,6 +62,7 @@ export function FileConflictDialog({
   return (
     <div className="dialog-backdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="conflict-dialog"
         role="dialog"
         aria-modal="true"

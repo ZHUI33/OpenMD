@@ -826,6 +826,119 @@
   background: var(--dialog-backdrop);
 }
 
+.recovery-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1400;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--dialog-backdrop);
+}
+
+.recovery-dialog {
+  display: grid;
+  width: min(760px, 100%);
+  max-height: min(760px, calc(100vh - 48px));
+  padding: 24px;
+  overflow: hidden;
+  color: var(--foreground);
+  border: 1px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow);
+}
+
+.recovery-dialog > header,
+.recovery-dialog > footer,
+.recovery-record__heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.recovery-dialog h2,
+.recovery-dialog p {
+  margin: 0;
+}
+
+.recovery-dialog__eyebrow,
+.recovery-dialog__workspace,
+.recovery-record time,
+.recovery-record__path {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.recovery-dialog__eyebrow {
+  margin-bottom: 4px !important;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+}
+
+.recovery-dialog__notice {
+  margin-top: 16px !important;
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-subtle);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.recovery-dialog__records {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+  overflow: auto;
+}
+
+.recovery-record {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--surface);
+}
+
+.recovery-record p {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.recovery-record > button {
+  justify-self: start;
+}
+
+.recovery-dialog button,
+.recovery-record button {
+  min-height: 34px;
+  padding: 6px 12px;
+  color: var(--foreground);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+}
+
+.recovery-dialog button:focus-visible,
+.recovery-record button:focus-visible {
+  outline: var(--focus-ring-size) solid var(--primary);
+  outline-offset: 2px;
+}
+
+.recovery-dialog > footer {
+  justify-content: flex-end;
+}
+
+.recovery-dialog .primary-button {
+  color: var(--primary-contrast);
+  border-color: var(--primary);
+  background: var(--primary);
+}
+
 .conflict-dialog {
   display: flex;
   width: min(940px, 92vw);

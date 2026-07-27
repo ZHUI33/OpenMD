@@ -19,13 +19,14 @@ describe('ExportDialog', () => {
         onClose: vi.fn(),
         onExportHtml,
         onExportPdf: vi.fn(),
+        onExportPng: vi.fn(),
       }),
     )
 
     await user.click(screen.getByLabelText('嵌入 Base64（本地图片）'))
     await user.click(screen.getByRole('button', { name: '选择保存位置' }))
 
-    expect(onExportHtml).toHaveBeenCalledWith('Example', 'base64')
+    expect(onExportHtml).toHaveBeenCalledWith('Example', 'base64', 'styled')
   })
 
   it('submits Letter PDF options without exposing application chrome settings', async () => {
@@ -38,6 +39,7 @@ describe('ExportDialog', () => {
         onClose: vi.fn(),
         onExportHtml: vi.fn(),
         onExportPdf,
+        onExportPng: vi.fn(),
       }),
     )
 
@@ -50,6 +52,11 @@ describe('ExportDialog', () => {
       pageSize: 'Letter',
       marginMm: 18,
       printBackground: true,
+      theme: 'light',
+      headerText: '',
+      footerText: '',
+      pageNumbers: true,
+      pageBreakBeforeHeadings: false,
     })
     expect(screen.queryByText(/侧边栏/u)).toBeNull()
   })

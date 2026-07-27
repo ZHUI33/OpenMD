@@ -8,6 +8,7 @@ import type {
   WorkspaceQuickOpenMatch,
 } from '../../../shared/desktop-api.types'
 import { normalizeEditorTabPath } from '../stores/editor-tabs-store'
+import { useDialogFocus } from './use-dialog-focus'
 
 interface QuickOpenItem {
   key: string
@@ -101,12 +102,14 @@ export function QuickOpen({
   onClose,
 }: QuickOpenProps): JSX.Element | null {
   const inputRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLElement>(null)
   const generationRef = useRef(0)
   const [query, setQuery] = useState('')
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>([])
   const [workspaceMatches, setWorkspaceMatches] = useState<WorkspaceQuickOpenMatch[]>([])
   const [selectedIndex, setSelectedIndex] = useState(0)
   const [busy, setBusy] = useState(false)
+  useDialogFocus(dialogRef, open)
 
   useEffect(() => {
     if (!open) return
@@ -189,7 +192,13 @@ export function QuickOpen({
         if (event.target === event.currentTarget) onClose()
       }}
     >
-      <section className="quick-open" role="dialog" aria-modal="true" aria-label="快速打开">
+      <section
+        ref={dialogRef}
+        className="quick-open"
+        role="dialog"
+        aria-modal="true"
+        aria-label="快速打开"
+      >
         <input
           ref={inputRef}
           className="quick-open__input"

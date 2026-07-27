@@ -23,6 +23,8 @@
     "format:check": "prettier --check .",
     "icon:generate": "node scripts/generate-icon.cjs",
     "docs:screenshots": "pnpm build && node scripts/capture-readme.cjs",
+    "benchmark:fixtures": "node scripts/generate-benchmark-fixtures.cjs",
+    "benchmark": "node scripts/run-performance-benchmarks.cjs",
     "dist:win": "pnpm build && electron-builder --win --x64 --publish never",
     "dist:mac": "pnpm build && electron-builder --mac --x64 --arm64 --publish never"
   },

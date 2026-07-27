@@ -95,6 +95,15 @@ export const APP_COMMANDS = Object.freeze({
     primary: true,
     accelerator: 'CmdOrCtrl+Alt+P',
   }),
+  'export-png': command('export-png', '导出长图 PNG…', 'g', {
+    primary: true,
+    accelerator: 'CmdOrCtrl+Alt+G',
+  }),
+  'export-repeat': command('export-repeat', '使用上次配置再次导出', 'e', {
+    primary: true,
+    shift: true,
+    accelerator: 'CmdOrCtrl+Shift+E',
+  }),
   reload: command('reload', '重新加载', 'r', {
     primary: true,
     accelerator: 'CmdOrCtrl+R',

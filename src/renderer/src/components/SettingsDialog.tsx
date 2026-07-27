@@ -8,6 +8,7 @@ import { getRendererSettingsApi } from '../settings/settings-api'
 import type { RendererSettingsApi } from '../settings/settings-api'
 import { getApplicationThemeController } from '../settings/theme-controller'
 import type { ThemeController } from '../settings/theme-controller'
+import { useDialogFocus } from './use-dialog-focus'
 import './SettingsDialog.css'
 
 export interface SettingsDialogProps {
@@ -50,11 +51,13 @@ export function SettingsDialog({
 }: SettingsDialogProps): JSX.Element | null {
   const titleId = useId()
   const closeButtonRef = useRef<HTMLButtonElement>(null)
+  const dialogRef = useRef<HTMLElement>(null)
   const [draft, setDraft] = useState<AppSettings>()
   const [userThemes, setUserThemes] = useState<UserThemeInfo[]>([])
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>()
+  useDialogFocus(dialogRef, open)
 
   useEffect(() => {
     if (!open) return
@@ -141,6 +144,7 @@ export function SettingsDialog({
       }}
     >
       <section
+        ref={dialogRef}
         className="settings-dialog"
         role="dialog"
         aria-modal="true"

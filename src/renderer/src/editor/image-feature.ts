@@ -381,6 +381,8 @@ class OpenMdImageNodeView implements NodeView {
   private revision = 0
   private destroyed = false
   private composingAlt = false
+  private visible = false
+  private visibilityObserver?: IntersectionObserver
 
   constructor(
     node: ProseMirrorNode,
@@ -401,6 +403,7 @@ class OpenMdImageNodeView implements NodeView {
     this.image = ownerDocument.createElement('img')
     this.image.className = 'openmd-image'
     this.image.decoding = 'async'
+    this.image.loading = 'lazy'
     this.image.referrerPolicy = 'no-referrer'
     this.image.draggable = true
     this.placeholder = ownerDocument.createElement('span')
@@ -455,8 +458,25 @@ class OpenMdImageNodeView implements NodeView {
     this.altInput.addEventListener('keydown', this.onAltKeyDown)
     this.altInput.addEventListener('compositionstart', this.onAltCompositionStart)
     this.altInput.addEventListener('compositionend', this.onAltCompositionEnd)
-    this.unregisterRefresh = controller.onRefresh(() => this.render())
-    this.render()
+    this.unregisterRefresh = controller.onRefresh(() => this.requestRender())
+    const Observer = ownerDocument.defaultView?.IntersectionObserver
+    if (Observer) {
+      this.visibilityObserver = new Observer(
+        (entries) => {
+          if (!entries.some((entry) => entry.isIntersecting)) return
+          this.visible = true
+          this.visibilityObserver?.disconnect()
+          this.visibilityObserver = undefined
+          this.render()
+        },
+        { rootMargin: '600px 0px' },
+      )
+      this.markDeferred()
+      this.visibilityObserver.observe(this.dom)
+    } else {
+      this.visible = true
+      this.render()
+    }
   }
 
   update(node: ProseMirrorNode): boolean {
@@ -468,7 +488,7 @@ class OpenMdImageNodeView implements NodeView {
     if (!this.composingAlt && this.altInput.value !== nextAlt) this.altInput.value = nextAlt
     if (sourceChanged) {
       this.dom.dataset.size = this.controller.getDisplaySize(String(node.attrs.src))
-      this.render()
+      this.requestRender()
     }
     return true
   }
@@ -500,6 +520,8 @@ class OpenMdImageNodeView implements NodeView {
     this.altInput.removeEventListener('compositionstart', this.onAltCompositionStart)
     this.altInput.removeEventListener('compositionend', this.onAltCompositionEnd)
     this.unregisterRefresh()
+    this.visibilityObserver?.disconnect()
+    this.visibilityObserver = undefined
   }
 
   private button(label: string, ariaLabel: string): HTMLButtonElement {
@@ -540,6 +562,22 @@ class OpenMdImageNodeView implements NodeView {
         if (this.destroyed || revision !== this.revision) return
         this.fail(error instanceof Error ? error.message : '图片加载失败。')
       })
+  }
+
+  private requestRender(): void {
+    if (this.visible || !this.visibilityObserver) this.render()
+    else this.markDeferred()
+  }
+
+  private markDeferred(): void {
+    const source = String(this.node.attrs.src ?? '').trim()
+    this.dom.dataset.state = 'deferred'
+    this.placeholder.textContent = '图片将在进入视口时加载'
+    this.status.textContent = ''
+    this.path.textContent = source
+    this.path.title = source
+    this.image.alt = String(this.node.attrs.alt ?? '')
+    this.image.removeAttribute('src')
   }
 
   private fail(message: string): void {

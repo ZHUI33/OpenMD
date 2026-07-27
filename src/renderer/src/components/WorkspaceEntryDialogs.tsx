@@ -4,6 +4,7 @@ import type { FormEvent, JSX } from 'react'
 import type { WorkspaceEntry } from '../../../shared/desktop-api.types'
 import { validateWorkspaceEntryName } from './workspace-entry-utils'
 import type { EntryDialogMode } from './workspace-entry-utils'
+import { useDialogFocus } from './use-dialog-focus'
 
 interface EntryNameDialogProps {
   mode: EntryDialogMode
@@ -27,10 +28,12 @@ export function WorkspaceEntryNameDialog({
   onConfirm,
 }: EntryNameDialogProps): JSX.Element {
   const inputRef = useRef<HTMLInputElement>(null)
+  const dialogRef = useRef<HTMLFormElement>(null)
   const [value, setValue] = useState(initialValue)
   const [submitting, setSubmitting] = useState(false)
   const [backendError, setBackendError] = useState<string>()
   const validationError = validateWorkspaceEntryName(value, mode, entry)
+  useDialogFocus(dialogRef)
 
   useEffect(() => {
     inputRef.current?.focus()
@@ -58,6 +61,7 @@ export function WorkspaceEntryNameDialog({
       }}
     >
       <form
+        ref={dialogRef}
         className="entry-name-dialog"
         role="dialog"
         aria-modal="true"
@@ -126,9 +130,12 @@ export function WorkspaceDeleteConfirmation({
   onCancel,
   onConfirm,
 }: DeleteConfirmationProps): JSX.Element {
+  const dialogRef = useRef<HTMLElement>(null)
+  useDialogFocus(dialogRef)
   return (
     <div className="entry-dialog-backdrop" role="presentation">
       <section
+        ref={dialogRef}
         className="entry-name-dialog delete-confirmation"
         role="alertdialog"
         aria-modal="true"

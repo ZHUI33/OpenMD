@@ -63,4 +63,20 @@ describe('standalone HTML export', () => {
     expect(html).toContain('src="./images/local.png"')
     expect(resolveImage).not.toHaveBeenCalled()
   })
+
+  it('can emit semantic unstyled HTML while retaining CSP and sanitization', async () => {
+    const html = await buildStandaloneHtml({
+      markdown: '# Plain\n\n<script>alert(1)</script>\n\n**semantic**',
+      title: 'Plain export',
+      imageStrategy: 'relative',
+      style: 'unstyled',
+      imagesApi: { resolveImage: vi.fn() },
+    })
+
+    expect(html).toContain('<h1>Plain</h1>')
+    expect(html).toContain('<strong>semantic</strong>')
+    expect(html).not.toContain('<style>')
+    expect(html).not.toMatch(/<script\b/iu)
+    expect(html).toContain('Content-Security-Policy')
+  })
 })

@@ -1,0 +1,23 @@
+{
+  "generatedAt": "2026-07-27T07:06:12.886Z",
+  "fixtures": {
+    "document-1mb.md": {
+      "bytes": 1048674
+    },
+    "document-5mb.md": {
+      "bytes": 5242888
+    },
+    "long-list.md": {
+      "bytes": 1756383
+    },
+    "large-table.md": {
+      "bytes": 151596
+    },
+    "many-code-blocks.md": {
+      "bytes": 102401
+    },
+    "many-mermaid.md": {
+      "bytes": 43490
+    }
+  }
+}

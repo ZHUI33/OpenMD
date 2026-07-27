@@ -10,6 +10,7 @@ import { registerSettingsIpcHandlers } from './ipc/settings'
 import { installApplicationMenu } from './menu'
 import { OpenedFileWatcher } from './opened-file-watcher'
 import { RecentFilesStore } from './recent-files'
+import { RecoveryService } from './recovery-service'
 import { SettingsService } from './settings-service'
 import { UserThemeService } from './user-theme-service'
 import { UpdateService } from './update-service'
@@ -51,6 +52,7 @@ app.on('before-quit', handleBeforeQuit)
 void app.whenReady().then(() => {
   const userDataPath = app.getPath('userData')
   const recentFilesStore = new RecentFilesStore(join(userDataPath, 'recent-files.json'))
+  const recoveryService = new RecoveryService(join(userDataPath, 'recovery'))
   const updateMenu = (
     recentFiles: Awaited<ReturnType<RecentFilesStore['getRecentFiles']>>,
   ): void => {
@@ -82,7 +84,13 @@ void app.whenReady().then(() => {
   const exportService = new ExportService()
   const updateService = new UpdateService()
 
-  registerIpcHandlers(documentService, imageService, workspaceService, exportService)
+  registerIpcHandlers(
+    documentService,
+    imageService,
+    workspaceService,
+    exportService,
+    recoveryService,
+  )
   registerSettingsIpcHandlers(settingsService, userThemeService, getTrustedSenderWindow)
   const mainWindow = createMainWindow()
   openExternalDocument = (filePath): void => {

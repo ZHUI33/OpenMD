@@ -2,7 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { CSSProperties, JSX } from 'react'
 
 import type {
+  HtmlExportStyle,
   HtmlImageStrategy,
+  RecoverySnapshot,
+  RecoveryTabSnapshot,
   RendererCommand,
   WorkspaceEntry,
   WorkspaceFileChange,
@@ -15,7 +18,7 @@ import type { AppSettings, AppSettingsUpdate, BuiltInTheme } from '../../shared/
 import type { SidebarPanel } from '../../shared/settings'
 import { FileConflictDialog } from './components/FileConflictDialog'
 import { ExportDialog } from './components/ExportDialog'
-import type { PdfExportOptions } from './components/ExportDialog'
+import type { PdfExportOptions, PngExportOptions } from './components/ExportDialog'
 import { SettingsDialog } from './components/SettingsDialog'
 import { FindReplaceBar } from './components/FindReplaceBar'
 import { NavigationSidebar } from './components/NavigationSidebar'
@@ -24,6 +27,7 @@ import { StatusBar } from './components/StatusBar'
 import { TabBar } from './components/TabBar'
 import { TitleBar } from './components/TitleBar'
 import { QuickOpen } from './components/QuickOpen'
+import { RecoveryDialog } from './components/RecoveryDialog'
 import { WorkspaceSearch } from './components/WorkspaceSearch'
 import { WorkspaceSidebar } from './components/WorkspaceSidebar'
 import { OpenMdEditor } from './editor/OpenMdEditor'
@@ -36,6 +40,12 @@ import type {
 import type { OutlineItem } from './editor/outline-feature'
 import { resolveExternalFileChange } from './external-file-state'
 import { buildStandaloneHtml } from './export-document'
+import {
+  exportDocumentIdentity,
+  loadExportConfiguration,
+  saveExportConfiguration,
+} from './export-preferences'
+import type { ExportConfiguration } from './export-preferences'
 import { getRendererSettingsApi } from './settings/settings-api'
 import { getApplicationThemeController } from './settings/theme-controller'
 import { useAppStore } from './stores/app-store'
@@ -121,7 +131,10 @@ function App(): JSX.Element {
   const [conflicts, setConflicts] = useState<Record<string, FileConflictState>>({})
   const [deletedTabIds, setDeletedTabIds] = useState<Set<string>>(new Set())
   const [toast, setToast] = useState<ToastState>()
-  const [exportMode, setExportMode] = useState<'html' | 'pdf'>()
+  const [exportMode, setExportMode] = useState<'html' | 'pdf' | 'png'>()
+  const [exportInitialConfiguration, setExportInitialConfiguration] =
+    useState<ExportConfiguration>()
+  const [activeExportConfiguration, setActiveExportConfiguration] = useState<ExportConfiguration>()
   const [exportBusy, setExportBusy] = useState(false)
   const [exportError, setExportError] = useState<string>()
   const [quickOpen, setQuickOpen] = useState(false)
@@ -132,10 +145,12 @@ function App(): JSX.Element {
     current: 0,
     total: 0,
   })
+  const [recoverySnapshot, setRecoverySnapshot] = useState<RecoverySnapshot | null>()
+  const [recoveryReady, setRecoveryReady] = useState(false)
+  const [recoveryBusy, setRecoveryBusy] = useState(false)
 
   activeTabIdRef.current = activeTabId
   searchOpenRef.current = findOpen
-  searchQueryRef.current = searchQuery
 
   const showToast = useCallback((message: string, kind: ToastState['kind'] = 'info'): void => {
     toastSequenceRef.current += 1
@@ -183,6 +198,34 @@ function App(): JSX.Element {
     store.setTabScrollPosition(tabId, editor.getScrollPosition?.())
     store.setTabCursorAnchor(tabId, editor.getCursorAnchor?.())
   }, [])
+
+  const backupCurrentSession = useCallback(
+    async (includeCursor = false): Promise<void> => {
+      const store = useEditorTabsStore.getState()
+      const activeId = activeTabIdRef.current
+      const editor = editorRef.current
+      const current = store
+      await window.openmd.recovery.saveSession({
+        workspace,
+        activeTabId: current.activeTabId,
+        tabs: current.tabs.map((tab) => ({
+          id: tab.id,
+          title: tab.title,
+          filePath: tab.filePath,
+          markdown: tab.markdown,
+          dirty: tab.dirty,
+          editorMode: tab.id === activeId && editor ? editor.getMode() : tab.editorMode,
+          scrollPosition:
+            tab.id === activeId && editor ? editor.getScrollPosition?.() : tab.scrollPosition,
+          cursorAnchor:
+            tab.id === activeId && editor && includeCursor
+              ? editor.getCursorAnchor?.()
+              : tab.cursorAnchor,
+        })),
+      })
+    },
+    [workspace],
+  )
 
   const displayTab = useCallback(async (tabId: string, revealLine?: number): Promise<void> => {
     const generation = ++displayGenerationRef.current
@@ -418,6 +461,7 @@ function App(): JSX.Element {
           useEditorTabsStore
             .getState()
             .updateTabFilePath(tabId, result.filePath, fileNameFromPath(result.filePath))
+          await window.openmd.recovery.clearRecord({ tabId }).catch(() => undefined)
           if (
             tab.filePath &&
             normalizeEditorTabPath(tab.filePath) !== normalizeEditorTabPath(result.filePath)
@@ -487,6 +531,7 @@ function App(): JSX.Element {
               confirmation.filePath,
               fileNameFromPath(confirmation.filePath),
             )
+          await window.openmd.recovery.clearRecord({ tabId: current.id }).catch(() => undefined)
           if (
             current.filePath &&
             normalizeEditorTabPath(current.filePath) !==
@@ -515,8 +560,15 @@ function App(): JSX.Element {
   )
 
   const openExportDialog = useCallback(
-    (mode: 'html' | 'pdf'): void => {
+    (mode: 'html' | 'pdf' | 'png'): void => {
       captureActiveEditor()
+      const tab = useEditorTabsStore
+        .getState()
+        .tabs.find((candidate) => candidate.id === activeTabIdRef.current)
+      const saved = tab
+        ? loadExportConfiguration(exportDocumentIdentity(tab.id, tab.filePath))
+        : undefined
+      setExportInitialConfiguration(saved?.mode === mode ? saved : undefined)
       setExportError(undefined)
       setExportMode(mode)
     },
@@ -524,7 +576,11 @@ function App(): JSX.Element {
   )
 
   const exportHtml = useCallback(
-    async (title: string, imageStrategy: HtmlImageStrategy): Promise<void> => {
+    async (
+      title: string,
+      imageStrategy: HtmlImageStrategy,
+      style: HtmlExportStyle,
+    ): Promise<void> => {
       captureActiveEditor()
       const tab = useEditorTabsStore
         .getState()
@@ -538,6 +594,7 @@ function App(): JSX.Element {
           title,
           documentPath: tab.filePath,
           imageStrategy,
+          style,
           imagesApi: window.openmd.images,
         })
         const result = await window.openmd.exports.html({
@@ -547,6 +604,14 @@ function App(): JSX.Element {
         })
         if (result.error) throw new Error(result.error)
         if (!result.canceled && result.filePath) {
+          const configuration: ExportConfiguration = {
+            mode: 'html',
+            title,
+            imageStrategy,
+            style,
+          }
+          saveExportConfiguration(exportDocumentIdentity(tab.id, tab.filePath), configuration)
+          setActiveExportConfiguration(configuration)
           setExportMode(undefined)
           showToast(`已导出 ${fileNameFromPath(result.filePath)}`)
         }
@@ -574,6 +639,9 @@ function App(): JSX.Element {
           title,
           documentPath: tab.filePath,
           imageStrategy: 'base64',
+          style: 'styled',
+          theme: options.theme,
+          pageBreakBeforeHeadings: options.pageBreakBeforeHeadings,
           imagesApi: window.openmd.images,
         })
         const marginInches = Math.max(0, Math.min(50, options.marginMm)) / 25.4
@@ -589,9 +657,21 @@ function App(): JSX.Element {
             left: marginInches,
           },
           printBackground: options.printBackground,
+          theme: options.theme,
+          headerText: options.headerText,
+          footerText: options.footerText,
+          pageNumbers: options.pageNumbers,
+          pageBreakBeforeHeadings: options.pageBreakBeforeHeadings,
         })
         if (result.error) throw new Error(result.error)
         if (!result.canceled && result.filePath) {
+          const configuration: ExportConfiguration = {
+            mode: 'pdf',
+            title,
+            ...options,
+          }
+          saveExportConfiguration(exportDocumentIdentity(tab.id, tab.filePath), configuration)
+          setActiveExportConfiguration(configuration)
           setExportMode(undefined)
           showToast(`已导出 ${fileNameFromPath(result.filePath)}`)
         }
@@ -603,6 +683,73 @@ function App(): JSX.Element {
     },
     [captureActiveEditor, showToast],
   )
+
+  const exportPng = useCallback(
+    async (title: string, options: PngExportOptions): Promise<void> => {
+      captureActiveEditor()
+      const tab = useEditorTabsStore
+        .getState()
+        .tabs.find((candidate) => candidate.id === activeTabIdRef.current)
+      if (!tab) return
+      setExportBusy(true)
+      setExportError(undefined)
+      try {
+        const documentHtml = await buildStandaloneHtml({
+          markdown: tab.markdown,
+          title,
+          documentPath: tab.filePath,
+          imageStrategy: 'base64',
+          style: 'styled',
+          theme: options.theme,
+          imagesApi: window.openmd.images,
+        })
+        const result = await window.openmd.exports.png({
+          documentHtml,
+          documentPath: tab.filePath,
+          title,
+          width: Math.max(480, Math.min(2_400, Math.round(options.width))),
+          theme: options.theme,
+        })
+        if (result.error) throw new Error(result.error)
+        if (!result.canceled && result.filePath) {
+          const configuration: ExportConfiguration = {
+            mode: 'png',
+            title,
+            ...options,
+          }
+          saveExportConfiguration(exportDocumentIdentity(tab.id, tab.filePath), configuration)
+          setActiveExportConfiguration(configuration)
+          setExportMode(undefined)
+          showToast(`已导出 ${fileNameFromPath(result.filePath)}`)
+        }
+      } catch (error) {
+        setExportError(error instanceof Error ? error.message : 'PNG 导出失败。')
+      } finally {
+        setExportBusy(false)
+      }
+    },
+    [captureActiveEditor, showToast],
+  )
+
+  const repeatLastExport = useCallback(async (): Promise<void> => {
+    captureActiveEditor()
+    const tab = useEditorTabsStore
+      .getState()
+      .tabs.find((candidate) => candidate.id === activeTabIdRef.current)
+    if (!tab) return
+    const configuration = loadExportConfiguration(exportDocumentIdentity(tab.id, tab.filePath))
+    if (!configuration) {
+      showToast('此文档还没有成功导出的配置。')
+      return
+    }
+    if (configuration.mode === 'html') {
+      await exportHtml(configuration.title, configuration.imageStrategy, configuration.style)
+    } else if (configuration.mode === 'pdf') {
+      await exportPdf(configuration.title, configuration)
+    } else {
+      await exportPng(configuration.title, configuration)
+    }
+  }, [captureActiveEditor, exportHtml, exportPdf, exportPng, showToast])
 
   const closeTabs = useCallback(
     async (scope: CloseTabsScope, anchorTabId?: string): Promise<void> => {
@@ -618,9 +765,12 @@ function App(): JSX.Element {
       if (result.status !== 'closed') return
 
       await Promise.all(
-        result.tabs.flatMap((tab) =>
-          tab.filePath ? [window.openmd.documents.releaseDocument({ filePath: tab.filePath })] : [],
-        ),
+        result.tabs.flatMap((tab) => [
+          ...(tab.filePath
+            ? [window.openmd.documents.releaseDocument({ filePath: tab.filePath })]
+            : []),
+          window.openmd.recovery.clearRecord({ tabId: tab.id }),
+        ]),
       ).catch(() => undefined)
 
       for (const tabId of result.closedTabIds) relativePathByTabIdRef.current.delete(tabId)
@@ -689,6 +839,116 @@ function App(): JSX.Element {
       )
     if (result) await displayTab(result.tabId)
   }, [captureActiveEditor, displayTab, showToast])
+
+  const restoreRecoveryTabs = useCallback(
+    async (recoverableTabs: readonly RecoveryTabSnapshot[]): Promise<Map<string, string>> => {
+      const restoredIds = new Map<string, string>()
+      const store = useEditorTabsStore.getState()
+      for (const recovered of recoverableTabs) {
+        if (recovered.content !== undefined) {
+          const result = store.openTab({
+            id: recovered.id,
+            title: `已恢复 — ${recovered.title}`,
+            markdown: recovered.content,
+            dirty: true,
+            editorMode: recovered.editorMode,
+            scrollPosition: recovered.scrollPosition,
+            cursorAnchor: recovered.cursorAnchor,
+          })
+          restoredIds.set(recovered.id, result.tabId)
+          continue
+        }
+        if (!recovered.originalPath) continue
+        try {
+          const opened = await window.openmd.documents.openDocument({
+            filePath: recovered.originalPath,
+          })
+          if (opened.canceled || opened.error || opened.content === undefined || !opened.filePath) {
+            continue
+          }
+          const result = store.openTab({
+            filePath: opened.filePath,
+            title: fileNameFromPath(opened.filePath),
+            markdown: opened.content,
+            editorMode: recovered.editorMode,
+            scrollPosition: recovered.scrollPosition,
+            cursorAnchor: recovered.cursorAnchor,
+          })
+          restoredIds.set(recovered.id, result.tabId)
+        } catch {
+          showToast(`无法重新打开 ${recovered.title}，其余恢复内容仍会继续处理。`, 'error')
+        }
+      }
+      return restoredIds
+    },
+    [showToast],
+  )
+
+  const finishRecovery = useCallback(async (): Promise<void> => {
+    await window.openmd.recovery.discard().catch(() => undefined)
+    setRecoverySnapshot(null)
+    setRecoveryReady(true)
+    if (useEditorTabsStore.getState().tabs.length > 0) {
+      await backupCurrentSession().catch(() => undefined)
+    }
+  }, [backupCurrentSession])
+
+  const restoreAllRecovery = useCallback(async (): Promise<void> => {
+    const snapshot = recoverySnapshot
+    if (!snapshot?.available || recoveryBusy) return
+    setRecoveryBusy(true)
+    try {
+      if (snapshot.workspace) {
+        const restoredWorkspace = await window.openmd.recovery.restoreWorkspace()
+        if (restoredWorkspace) setWorkspace(restoredWorkspace)
+      }
+      const restoredIds = await restoreRecoveryTabs(snapshot.tabs)
+      const preferredId = snapshot.activeTabId ? restoredIds.get(snapshot.activeTabId) : undefined
+      const targetId = preferredId ?? [...restoredIds.values()].at(-1)
+      if (targetId) await displayTab(targetId)
+      await finishRecovery()
+      showToast(`已恢复 ${restoredIds.size} 个标签；修改稿均作为副本打开。`)
+    } catch (error) {
+      showToast(error instanceof Error ? error.message : '恢复会话失败。', 'error')
+    } finally {
+      setRecoveryBusy(false)
+    }
+  }, [displayTab, finishRecovery, recoveryBusy, recoverySnapshot, restoreRecoveryTabs, showToast])
+
+  const restoreOneRecoveryTab = useCallback(
+    async (recovered: RecoveryTabSnapshot): Promise<void> => {
+      if (recoveryBusy) return
+      setRecoveryBusy(true)
+      try {
+        if (recoverySnapshot?.workspace && !workspace) {
+          const restoredWorkspace = await window.openmd.recovery.restoreWorkspace()
+          if (restoredWorkspace) setWorkspace(restoredWorkspace)
+        }
+        const restoredIds = await restoreRecoveryTabs([recovered])
+        const targetId = restoredIds.get(recovered.id)
+        if (targetId) await displayTab(targetId)
+        const remainingTabs = recoverySnapshot?.tabs.filter((tab) => tab.id !== recovered.id) ?? []
+        if (remainingTabs.length === 0) {
+          await finishRecovery()
+        } else if (recoverySnapshot) {
+          setRecoverySnapshot({ ...recoverySnapshot, tabs: remainingTabs })
+        }
+      } finally {
+        setRecoveryBusy(false)
+      }
+    },
+    [displayTab, finishRecovery, recoveryBusy, recoverySnapshot, restoreRecoveryTabs, workspace],
+  )
+
+  const discardRecovery = useCallback(async (): Promise<void> => {
+    if (recoveryBusy) return
+    setRecoveryBusy(true)
+    try {
+      await finishRecovery()
+    } finally {
+      setRecoveryBusy(false)
+    }
+  }, [finishRecovery, recoveryBusy])
 
   const reloadActiveFromDisk = useCallback(async (): Promise<void> => {
     captureActiveEditor()
@@ -789,9 +1049,30 @@ function App(): JSX.Element {
   }, [])
 
   useEffect(() => {
-    if (!settingsReady) return
+    if (!settingsReady || !recoveryReady || recoverySnapshot) return
     void ensureOneTab()
-  }, [ensureOneTab, settingsReady])
+  }, [ensureOneTab, recoveryReady, recoverySnapshot, settingsReady])
+
+  useEffect(() => {
+    let active = true
+    void window.openmd.recovery
+      .getSnapshot()
+      .then((snapshot) => {
+        if (!active) return
+        if (snapshot.available) setRecoverySnapshot(snapshot)
+        else setRecoverySnapshot(null)
+        setRecoveryReady(true)
+      })
+      .catch(() => {
+        if (!active) return
+        setRecoverySnapshot(null)
+        setRecoveryReady(true)
+        showToast('无法读取恢复记录；当前会话仍可正常编辑。', 'error')
+      })
+    return () => {
+      active = false
+    }
+  }, [showToast])
 
   useEffect(() => {
     void window.openmd.workspace
@@ -800,6 +1081,15 @@ function App(): JSX.Element {
         if (currentWorkspace) {
           setWorkspace(currentWorkspace)
         }
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    void window.openmd
+      .getAppInfo()
+      .then((info) => {
+        document.documentElement.dataset.platform = info.platform
       })
       .catch(() => undefined)
   }, [])
@@ -820,6 +1110,14 @@ function App(): JSX.Element {
       ? `${activeTab.title}${activeTab.dirty ? ' *' : ''} — OpenMD`
       : 'OpenMD'
   }, [activeTab])
+
+  useEffect(() => {
+    setActiveExportConfiguration(
+      activeTabId
+        ? loadExportConfiguration(exportDocumentIdentity(activeTabId, activeTab?.filePath))
+        : undefined,
+    )
+  }, [activeTab?.filePath, activeTabId])
 
   useEffect(() => {
     const removeListener = window.openmd.documents.onCommand((command) => {
@@ -850,6 +1148,12 @@ function App(): JSX.Element {
     if (!findOpen) return
     editorRef.current?.setSearchQuery(searchQuery)
   }, [activeTabId, findOpen, searchQuery])
+
+  const updateSearchQuery = useCallback((query: DocumentSearchQuery): void => {
+    searchQueryRef.current = query
+    setSearchQuery(query)
+    if (searchOpenRef.current) editorRef.current?.setSearchQuery(query)
+  }, [])
 
   useEffect(() => {
     return window.openmd.workspace.onFileChange((change: WorkspaceFileChange) => {
@@ -951,6 +1255,34 @@ function App(): JSX.Element {
     }
   }, [])
 
+  useEffect(() => {
+    if (!recoveryReady || recoverySnapshot) return
+    const timer = window.setTimeout(() => {
+      void backupCurrentSession().catch(() => {
+        showToast('草稿恢复备份失败；请尽快手动保存。', 'error')
+      })
+    }, 1_500)
+    return () => window.clearTimeout(timer)
+  }, [
+    activeTabId,
+    backupCurrentSession,
+    recoveryReady,
+    recoverySnapshot,
+    showToast,
+    tabs,
+    workspace,
+  ])
+
+  useEffect(() => {
+    if (!recoveryReady || recoverySnapshot) return
+    const timer = window.setInterval(() => {
+      void backupCurrentSession(true).catch(() => {
+        showToast('草稿恢复备份失败；请尽快手动保存。', 'error')
+      })
+    }, 15_000)
+    return () => window.clearInterval(timer)
+  }, [backupCurrentSession, recoveryReady, recoverySnapshot, showToast])
+
   commandHandlerRef.current = async (command): Promise<void> => {
     switch (command.type) {
       case 'new':
@@ -974,11 +1306,20 @@ function App(): JSX.Element {
       case 'export-pdf':
         openExportDialog('pdf')
         break
+      case 'export-png':
+        openExportDialog('png')
+        break
+      case 'export-repeat':
+        await repeatLastExport()
+        break
       case 'reload':
         await reloadActiveFromDisk()
         break
       case 'close': {
         const proceed = await confirmTabs(useEditorTabsStore.getState().tabs)
+        if (proceed) {
+          await window.openmd.recovery.completeSession().catch(() => undefined)
+        }
         await window.openmd.documents.resolveClose({
           intent: command.intent,
           requestId: command.requestId,
@@ -1060,6 +1401,9 @@ function App(): JSX.Element {
         onOpenSettings={() => setSettingsOpen(true)}
         onExportHtml={() => openExportDialog('html')}
         onExportPdf={() => openExportDialog('pdf')}
+        onExportPng={() => openExportDialog('png')}
+        onRepeatExport={() => void repeatLastExport()}
+        repeatExportDisabled={!activeTab || !activeExportConfiguration}
         onInsertImage={() => void editorRef.current?.insertImageFromPicker()}
       />
       <main
@@ -1125,10 +1469,16 @@ function App(): JSX.Element {
               replaceVisible={replaceVisible}
               value={searchQuery}
               status={searchStatus}
-              onChange={setSearchQuery}
+              onChange={updateSearchQuery}
               onNext={(direction) => editorRef.current?.findNext(direction)}
-              onReplace={() => editorRef.current?.replaceCurrent()}
-              onReplaceAll={() => editorRef.current?.replaceAll()}
+              onReplace={() => {
+                editorRef.current?.setSearchQuery(searchQueryRef.current)
+                editorRef.current?.replaceCurrent()
+              }}
+              onReplaceAll={() => {
+                editorRef.current?.setSearchQuery(searchQueryRef.current)
+                editorRef.current?.replaceAll()
+              }}
               onClose={() => {
                 setFindOpen(false)
                 setSearchStatus({ current: 0, total: 0 })
@@ -1213,11 +1563,25 @@ function App(): JSX.Element {
           defaultTitle={activeTab.title.replace(/\.(?:md|markdown)$/iu, '')}
           busy={exportBusy}
           error={exportError}
+          initialConfiguration={exportInitialConfiguration}
           onClose={() => {
             if (!exportBusy) setExportMode(undefined)
           }}
-          onExportHtml={(title, imageStrategy) => void exportHtml(title, imageStrategy)}
+          onExportHtml={(title, imageStrategy, style) =>
+            void exportHtml(title, imageStrategy, style)
+          }
           onExportPdf={(title, options) => void exportPdf(title, options)}
+          onExportPng={(title, options) => void exportPng(title, options)}
+        />
+      ) : null}
+
+      {recoverySnapshot?.available ? (
+        <RecoveryDialog
+          snapshot={recoverySnapshot}
+          busy={recoveryBusy}
+          onRestoreAll={() => void restoreAllRecovery()}
+          onRestoreTab={(tab) => void restoreOneRecoveryTab(tab)}
+          onDiscard={() => void discardRecovery()}
         />
       ) : null}
 

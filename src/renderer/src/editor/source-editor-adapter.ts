@@ -75,6 +75,7 @@ interface RawLine {
 }
 
 interface LineEndingSnapshot {
+  markdown: string
   preferred: string
   overrides: ReadonlyMap<number, string>
 }
@@ -89,16 +90,7 @@ function createLineEndingSnapshot(markdownText: string, preferred: string): Line
     lineBreakIndex += 1
   }
 
-  return { preferred, overrides }
-}
-
-function serializeTextWithLineEndings(document: Text, snapshot: LineEndingSnapshot): string {
-  let lineBreakIndex = 0
-  return document.toString().replace(/\n/g, () => {
-    const separator = snapshot.overrides.get(lineBreakIndex) ?? snapshot.preferred
-    lineBreakIndex += 1
-    return separator
-  })
+  return { markdown: markdownText, preferred, overrides }
 }
 
 function getRawLines(markdownText: string): RawLine[] {
@@ -146,12 +138,27 @@ function toInternalOffset(
   return line.from + Math.min(boundedOffset - rawLine.from, line.length)
 }
 
+function rawMarkdownOffset(
+  state: EditorState,
+  snapshot: LineEndingSnapshot,
+  documentOffset: number,
+): number {
+  const bounded = Math.max(0, Math.min(documentOffset, state.doc.length))
+  const precedingBreaks = state.doc.lineAt(bounded).number - 1
+  let rawOffset = bounded + precedingBreaks * (snapshot.preferred.length - 1)
+  for (const [lineBreakIndex, separator] of snapshot.overrides) {
+    if (lineBreakIndex >= precedingBreaks) continue
+    rawOffset += separator.length - snapshot.preferred.length
+  }
+  return rawOffset
+}
+
 function applyChangesToMarkdown(
   startState: EditorState,
-  markdownText: string,
+  snapshot: LineEndingSnapshot,
   changes: ChangeSet,
-  lineSeparator: string,
 ): string {
+  const markdownText = snapshot.markdown
   let rawCursor = 0
   let result = ''
 
@@ -164,18 +171,24 @@ function applyChangesToMarkdown(
   }
 
   changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
-    const rawFrom = toMarkdownOffset(startState, markdownText, fromA)
-    const rawTo = toMarkdownOffset(startState, markdownText, toA)
+    const rawFrom = rawMarkdownOffset(startState, snapshot, fromA)
+    const rawTo = rawMarkdownOffset(startState, snapshot, toA)
     appendFragment(markdownText.slice(rawCursor, rawFrom))
-    appendFragment(inserted.toString().replace(/\n/g, lineSeparator))
+    appendFragment(inserted.toString().replace(/\n/g, snapshot.preferred))
     rawCursor = rawTo
   })
 
   appendFragment(markdownText.slice(rawCursor))
 
-  const normalizedResult = result.replace(/\r\n|\r/g, '\n')
-  const expectedResult = changes.apply(startState.doc).toString()
-  return normalizedResult === expectedResult ? result : expectedResult.replace(/\n/g, lineSeparator)
+  return result
+}
+
+function changesLineStructure(state: EditorState, changes: ChangeSet): boolean {
+  let changed = false
+  changes.iterChanges((fromA, toA, _fromB, _toB, inserted) => {
+    if (inserted.lines > 1 || state.doc.sliceString(fromA, toA).includes('\n')) changed = true
+  })
+  return changed
 }
 
 function sourceBaseTheme(dark: boolean): Extension {
@@ -304,14 +317,14 @@ export class MarkdownSourceEditorAdapter implements EditorDocumentAdapter {
         if (restored) return restored.value
         if (!transaction.docChanged) return snapshot
 
-        const markdownBefore = serializeTextWithLineEndings(transaction.startState.doc, snapshot)
         const markdownAfter = applyChangesToMarkdown(
           transaction.startState,
-          markdownBefore,
+          snapshot,
           transaction.changes,
-          snapshot.preferred,
         )
-        return createLineEndingSnapshot(markdownAfter, snapshot.preferred)
+        return changesLineStructure(transaction.startState, transaction.changes)
+          ? createLineEndingSnapshot(markdownAfter, snapshot.preferred)
+          : { ...snapshot, markdown: markdownAfter }
       },
     })
   }
@@ -603,7 +616,7 @@ export class MarkdownSourceEditorAdapter implements EditorDocumentAdapter {
           if (this.destroyed) return
 
           if (update.docChanged) {
-            this.markdown = this.serializeState(update.state)
+            this.markdown = update.state.field(this.lineEndingsField).markdown
             this.markdownDocument = update.state.doc
             this.options.onChange(this.markdown)
           }
@@ -622,6 +635,6 @@ export class MarkdownSourceEditorAdapter implements EditorDocumentAdapter {
   }
 
   private serializeState(state: EditorState): string {
-    return serializeTextWithLineEndings(state.doc, state.field(this.lineEndingsField))
+    return state.field(this.lineEndingsField).markdown
   }
 }

@@ -1,0 +1,35 @@
+{
+  "label": "pre-release-quality-baseline",
+  "measuredAt": "2026-07-27T07:13:32.715Z",
+  "platform": "win32",
+  "architecture": "x64",
+  "unit": "milliseconds",
+  "results": {
+    "document-1mb.md:source": {
+      "openMs": 1201.8237,
+      "inputMs": 164.63059999999996,
+      "saveMs": 122.97710000000006,
+      "modeSwitchMs": 22500.034999999996
+    },
+    "document-5mb.md:source": {
+      "openMs": 1325.2600999999995,
+      "inputMs": 325.1635000000024,
+      "saveMs": 223.9274000000005
+    },
+    "long-list.md:source": {
+      "openMs": 1784.0131000000001,
+      "inputMs": 128.77470000000176,
+      "saveMs": 231.9250000000029
+    },
+    "large-table.md:visual": {
+      "openMs": 7157.223399999999
+    },
+    "many-code-blocks.md:visual": {
+      "openMs": 2253.595500000003
+    },
+    "many-mermaid.md:visual": {
+      "openMs": 1240.8397999999943
+    },
+    "tabSwitchMs": 172.73050000000512
+  }
+}

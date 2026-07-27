@@ -2,6 +2,8 @@ import { create } from 'zustand'
 
 import type { SaveDocumentResult } from '../../../shared/desktop-api.types'
 import type { EditorMode, SourceCursorPosition } from '../editor/editor.types'
+import { countCharacters, countWords } from '../document-statistics'
+export { countCharacters, countWords } from '../document-statistics'
 
 export type Theme = 'light' | 'dark' | 'system'
 
@@ -50,25 +52,6 @@ OpenMD 是一个开源、跨平台的 Markdown 编辑器。
 - 所见即所得
 - Markdown 原生存储
 - Windows 与 macOS 跨平台`
-
-export function countWords(markdown: string): number {
-  const text = markdown
-    .replace(/```[\s\S]*?```/g, (block) => block.replace(/```[^\n]*\n?|```/g, ''))
-    .replace(/!?(\[([^\]]*)\])\([^)]*\)/g, '$2')
-    .replace(/<[^>]+>|[#>*_~`|\-[\]]/g, ' ')
-  const chineseCharacters =
-    text.match(/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/gu)?.length ?? 0
-  const otherWords =
-    text
-      .match(/[\p{L}\p{N}]+(?:['’-][\p{L}\p{N}]+)*/gu)
-      ?.filter((word) => !/[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u.test(word))
-      .length ?? 0
-  return chineseCharacters + otherWords
-}
-
-export function countCharacters(markdown: string): number {
-  return Array.from(markdown).length
-}
 
 interface CreateDocumentStateOptions {
   savedMarkdown?: string

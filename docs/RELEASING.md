@@ -3,10 +3,13 @@
 ## 发布前检查
 
 1. 更新版本、`CHANGELOG.md` 和发布说明。
-2. 在 Windows 与 macOS 分别完成人工安装、启动、保存、文件关联、HTML/PDF 导出和卸载检查。
+2. 在 Windows 与 macOS 分别完成人工安装、启动、保存、文件关联、HTML/PDF/PNG 导出和卸载检查。
 3. 运行 `pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm build`、`pnpm test:e2e`。
-4. 确认仓库、Actions 日志和产物不包含证书、密码、Token 或本机路径。
-5. 推送形如 `v0.1.0` 的标签；Release workflow 会生成平台产物并创建/更新草稿 Release。
+4. 运行 `pnpm benchmark:fixtures` 和 `pnpm benchmark`，把毫秒数据与同一设备上的上一个发布版本比较。
+5. 验收浅色/深色、125%/150% 缩放、高对比度、减弱动画、完整键盘和焦点恢复截图。
+6. 强制结束一次带未命名/未保存标签的进程，验证恢复入口、摘要、工作区/活动标签恢复和不覆盖原文件。
+7. 确认仓库、Actions 日志和产物不包含证书、密码、Token 或本机路径。
+8. 推送形如 `v0.1.0` 的标签；Release workflow 会生成平台产物并创建/更新草稿 Release。
 
 ## 未签名测试包
 

@@ -7,14 +7,17 @@ import type { IpcMainInvokeEvent } from 'electron'
 import type {
   AppInfo,
   AppCommandState,
+  ClearRecoveryRecordRequest,
   ConfirmCloseRequest,
   ExportHtmlRequest,
   ExportPdfRequest,
+  ExportPngRequest,
   OpenDocumentRequest,
   OpenExternalUrlRequest,
   ResolveImageRequest,
   ResolveCloseRequest,
   SaveDocumentRequest,
+  SaveRecoverySessionRequest,
   SaveImageRequest,
   SelectImageRequest,
   CreateWorkspaceEntryRequest,
@@ -29,6 +32,7 @@ import { IPC_CHANNELS } from '../../shared/ipc-channels'
 import type { DocumentService } from '../document-service'
 import type { ExportService } from '../export-service'
 import type { ImageService } from '../image-service'
+import type { RecoveryService } from '../recovery-service'
 import type { WorkspaceService } from '../workspace-service'
 import { updateApplicationMenuCommandState } from '../menu'
 import { markRendererReady, reloadMainWindow, resolveCloseRequest } from '../window'
@@ -235,6 +239,13 @@ function parseExportPdfRequest(value: unknown): ExportPdfRequest {
     !isRecord(value) ||
     (value.pageSize !== 'A4' && value.pageSize !== 'Letter') ||
     typeof value.printBackground !== 'boolean' ||
+    (value.theme !== 'light' && value.theme !== 'dark') ||
+    typeof value.headerText !== 'string' ||
+    value.headerText.length > 500 ||
+    typeof value.footerText !== 'string' ||
+    value.footerText.length > 500 ||
+    typeof value.pageNumbers !== 'boolean' ||
+    typeof value.pageBreakBeforeHeadings !== 'boolean' ||
     !isRecord(value.margins)
   ) {
     throw new TypeError('Invalid PDF export request.')
@@ -252,7 +263,121 @@ function parseExportPdfRequest(value: unknown): ExportPdfRequest {
     pageSize: value.pageSize,
     printBackground: value.printBackground,
     margins,
+    theme: value.theme,
+    headerText: value.headerText,
+    footerText: value.footerText,
+    pageNumbers: value.pageNumbers,
+    pageBreakBeforeHeadings: value.pageBreakBeforeHeadings,
   }
+}
+
+function parseExportPngRequest(value: unknown): ExportPngRequest {
+  const html = parseExportHtmlRequest(value)
+  if (
+    !isRecord(value) ||
+    typeof value.width !== 'number' ||
+    !Number.isInteger(value.width) ||
+    value.width < 480 ||
+    value.width > 2_400 ||
+    (value.theme !== 'light' && value.theme !== 'dark')
+  ) {
+    throw new TypeError('Invalid PNG export request.')
+  }
+  return { ...html, width: value.width, theme: value.theme }
+}
+
+function parseRecoveryCursorAnchor(
+  value: unknown,
+): SaveRecoverySessionRequest['tabs'][number]['cursorAnchor'] {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) throw new TypeError('Invalid recovery cursor anchor.')
+  const cursorAnchor: NonNullable<SaveRecoverySessionRequest['tabs'][number]['cursorAnchor']> = {}
+  if (value.offset !== undefined) {
+    if (typeof value.offset !== 'number' || !Number.isInteger(value.offset) || value.offset < 0) {
+      throw new TypeError('Invalid recovery cursor offset.')
+    }
+    cursorAnchor.offset = value.offset
+  }
+  if (value.headingText !== undefined) {
+    if (typeof value.headingText !== 'string' || value.headingText.length > 10_000) {
+      throw new TypeError('Invalid recovery heading.')
+    }
+    cursorAnchor.headingText = value.headingText
+  }
+  if (value.blockIndex !== undefined) {
+    if (
+      typeof value.blockIndex !== 'number' ||
+      !Number.isInteger(value.blockIndex) ||
+      value.blockIndex < 0
+    ) {
+      throw new TypeError('Invalid recovery block index.')
+    }
+    cursorAnchor.blockIndex = value.blockIndex
+  }
+  return cursorAnchor
+}
+
+function parseSaveRecoverySessionRequest(value: unknown): SaveRecoverySessionRequest {
+  if (
+    !isRecord(value) ||
+    !Array.isArray(value.tabs) ||
+    value.tabs.length > 200 ||
+    (value.activeTabId !== undefined && typeof value.activeTabId !== 'string')
+  ) {
+    throw new TypeError('Invalid recovery session request.')
+  }
+  let workspace: SaveRecoverySessionRequest['workspace']
+  if (value.workspace !== undefined) {
+    if (
+      !isRecord(value.workspace) ||
+      typeof value.workspace.name !== 'string' ||
+      typeof value.workspace.rootPath !== 'string'
+    ) {
+      throw new TypeError('Invalid recovery workspace.')
+    }
+    workspace = { name: value.workspace.name, rootPath: value.workspace.rootPath }
+  }
+  const tabs = value.tabs.map((candidate): SaveRecoverySessionRequest['tabs'][number] => {
+    if (
+      !isRecord(candidate) ||
+      typeof candidate.id !== 'string' ||
+      candidate.id.length > 1_000 ||
+      typeof candidate.title !== 'string' ||
+      candidate.title.length > 1_000 ||
+      typeof candidate.markdown !== 'string' ||
+      typeof candidate.dirty !== 'boolean' ||
+      (candidate.editorMode !== 'visual' && candidate.editorMode !== 'source') ||
+      (candidate.filePath !== undefined && typeof candidate.filePath !== 'string') ||
+      (candidate.scrollPosition !== undefined &&
+        (typeof candidate.scrollPosition !== 'number' ||
+          !Number.isFinite(candidate.scrollPosition) ||
+          candidate.scrollPosition < 0))
+    ) {
+      throw new TypeError('Invalid recovery tab.')
+    }
+    return {
+      id: candidate.id,
+      title: candidate.title,
+      filePath: candidate.filePath as string | undefined,
+      markdown: candidate.markdown,
+      dirty: candidate.dirty,
+      editorMode: candidate.editorMode,
+      scrollPosition: candidate.scrollPosition as number | undefined,
+      cursorAnchor: parseRecoveryCursorAnchor(candidate.cursorAnchor),
+    }
+  })
+  return {
+    workspace,
+    activeTabId: value.activeTabId as string | undefined,
+    tabs,
+  }
+}
+
+function parseClearRecoveryRecordRequest(value: unknown): ClearRecoveryRecordRequest {
+  if (!isRecord(value) || typeof value.tabId !== 'string' || value.tabId.length > 1_000) {
+    throw new TypeError('Invalid recovery record request.')
+  }
+  return { tabId: value.tabId }
 }
 
 function parseRelativePath(value: unknown, fieldName = 'relativePath'): string {
@@ -351,6 +476,7 @@ export function registerIpcHandlers(
   imageService: ImageService,
   workspaceService: WorkspaceService,
   exportService: ExportService,
+  recoveryService: RecoveryService,
 ): void {
   ipcMain.removeHandler(IPC_CHANNELS.appGetInfo)
   ipcMain.handle(IPC_CHANNELS.appGetInfo, (event): AppInfo => {
@@ -431,6 +557,44 @@ export function registerIpcHandlers(
     return documentService.getRecentFiles()
   })
 
+  ipcMain.removeHandler(IPC_CHANNELS.recoveryGetSnapshot)
+  ipcMain.handle(IPC_CHANNELS.recoveryGetSnapshot, (event) => {
+    getTrustedSenderWindow(event)
+    return recoveryService.getSnapshot()
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.recoverySaveSession)
+  ipcMain.handle(IPC_CHANNELS.recoverySaveSession, (event, value: unknown) => {
+    getTrustedSenderWindow(event)
+    return recoveryService.saveSession(parseSaveRecoverySessionRequest(value))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.recoveryClearRecord)
+  ipcMain.handle(IPC_CHANNELS.recoveryClearRecord, (event, value: unknown) => {
+    getTrustedSenderWindow(event)
+    return recoveryService.clearRecord(parseClearRecoveryRecordRequest(value))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.recoveryRestoreWorkspace)
+  ipcMain.handle(IPC_CHANNELS.recoveryRestoreWorkspace, async (event) => {
+    const senderWindow = getTrustedSenderWindow(event)
+    const recoverableWorkspace = await recoveryService.getRecoverableWorkspace()
+    if (!recoverableWorkspace) return undefined
+    return workspaceService.restore(senderWindow, recoverableWorkspace.rootPath)
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.recoveryDiscard)
+  ipcMain.handle(IPC_CHANNELS.recoveryDiscard, (event) => {
+    getTrustedSenderWindow(event)
+    return recoveryService.discard()
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.recoveryCompleteSession)
+  ipcMain.handle(IPC_CHANNELS.recoveryCompleteSession, (event) => {
+    getTrustedSenderWindow(event)
+    return recoveryService.completeSession()
+  })
+
   ipcMain.removeHandler(IPC_CHANNELS.imagesSave)
   ipcMain.handle(IPC_CHANNELS.imagesSave, (event, value: unknown) => {
     const senderWindow = getTrustedSenderWindow(event)
@@ -457,6 +621,11 @@ export function registerIpcHandlers(
   ipcMain.removeHandler(IPC_CHANNELS.exportPdf)
   ipcMain.handle(IPC_CHANNELS.exportPdf, (event, value: unknown) => {
     return exportService.exportPdf(getTrustedSenderWindow(event), parseExportPdfRequest(value))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.exportPng)
+  ipcMain.handle(IPC_CHANNELS.exportPng, (event, value: unknown) => {
+    return exportService.exportPng(getTrustedSenderWindow(event), parseExportPngRequest(value))
   })
 
   ipcMain.removeHandler(IPC_CHANNELS.workspaceOpen)
@@ -546,6 +715,11 @@ export function registerIpcHandlers(
       getTrustedSenderWindow(event),
       parseWorkspaceSearchRequest(value),
     )
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceSearchCancel)
+  ipcMain.handle(IPC_CHANNELS.workspaceSearchCancel, (event) => {
+    workspaceService.cancelSearch(getTrustedSenderWindow(event))
   })
 
   ipcMain.removeHandler(IPC_CHANNELS.workspaceQuickOpen)

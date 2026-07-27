@@ -5,7 +5,12 @@ import katexCss from 'katex/dist/katex.min.css?raw'
 import MarkdownIt from 'markdown-it'
 import markdownItKatex from 'markdown-it-katex'
 
-import type { HtmlImageStrategy, ImagesApi } from '../../shared/desktop-api.types'
+import type {
+  ExportTheme,
+  HtmlExportStyle,
+  HtmlImageStrategy,
+  ImagesApi,
+} from '../../shared/desktop-api.types'
 import {
   createMermaidRenderId,
   OPENMD_MERMAID_CONFIG,
@@ -58,6 +63,33 @@ pre code { white-space: pre-wrap; overflow-wrap: normal; word-break: normal; }
 }
 `
 
+const DARK_EXPORT_STYLES = String.raw`
+:root { color-scheme: dark; }
+html, body { background: #191a1b; color: #eeeeea; }
+a { color: #91b7ff; }
+h1, h2 { border-color: #3b3e42; }
+blockquote { color: #b8bbbe; border-color: #555a60; }
+th { background: #303236; }
+tbody tr:nth-child(even) td { background: #242628; }
+th, td { border-color: #4b4f53; }
+pre { border-color: #3b4048; background: #1d1f23; }
+:not(pre) > code { background: #282f3c; }
+@media print {
+  html, body { background: #191a1b; color: #eeeeea; }
+  a { color: #c8d9ff; }
+  th, td { background: #242628 !important; }
+}
+`
+
+const PAGE_BREAK_STYLES = String.raw`
+@media print {
+  h1:not(:first-child), h2:not(:first-child) {
+    break-before: page;
+    page-break-before: always;
+  }
+}
+`
+
 const STANDALONE_KATEX_CSS = katexCss
   .replace(/@font-face\s*\{[^}]*\}/gu, '')
   .replace(/font-family:\s*KaTeX_[^;}]+/gu, 'font-family: "Times New Roman", serif')
@@ -67,6 +99,9 @@ export interface BuildStandaloneHtmlOptions {
   title: string
   documentPath?: string
   imageStrategy: HtmlImageStrategy
+  style?: HtmlExportStyle
+  theme?: ExportTheme
+  pageBreakBeforeHeadings?: boolean
   imagesApi: Pick<ImagesApi, 'resolveImage'>
   createdAt?: Date
 }
@@ -189,8 +224,14 @@ export async function buildStandaloneHtml(options: BuildStandaloneHtmlOptions): 
   const createdAt = (options.createdAt ?? new Date()).toISOString()
   const title = escapeHtml(options.title.trim() || 'OpenMD 文档')
   const bodyHtml = container.innerHTML
+  const style =
+    options.style === 'unstyled'
+      ? ''
+      : `  <style>${STANDALONE_KATEX_CSS}\n${highlightCss}\n${EXPORT_STYLES}${
+          options.theme === 'dark' ? DARK_EXPORT_STYLES : ''
+        }${options.pageBreakBeforeHeadings ? PAGE_BREAK_STYLES : ''}</style>\n`
   return `<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="${options.theme ?? 'light'}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -198,8 +239,7 @@ export async function buildStandaloneHtml(options: BuildStandaloneHtmlOptions): 
   <meta name="created" content="${createdAt}">
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src 'self' data: https: http:; style-src 'unsafe-inline'; font-src data:">
   <title>${title}</title>
-  <style>${STANDALONE_KATEX_CSS}\n${highlightCss}\n${EXPORT_STYLES}</style>
-</head>
+${style}</head>
 <body>
 ${bodyHtml}
 </body>

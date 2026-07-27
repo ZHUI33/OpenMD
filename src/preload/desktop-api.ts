@@ -3,10 +3,12 @@ import { ipcRenderer } from 'electron'
 import type {
   AppInfo,
   AppCommandState,
+  ClearRecoveryRecordRequest,
   ConfirmCloseRequest,
   ConfirmCloseResult,
   ExportHtmlRequest,
   ExportPdfRequest,
+  ExportPngRequest,
   RendererCommand,
   ReleaseDocumentRequest,
   ResolveImageRequest,
@@ -19,6 +21,7 @@ import type {
   OpenExternalUrlRequest,
   ResolveCloseRequest,
   SaveDocumentRequest,
+  SaveRecoverySessionRequest,
   SaveDocumentResult,
   SaveImageRequest,
   SaveImageResult,
@@ -37,6 +40,7 @@ import type {
   WorkspaceQuickOpenResult,
   WorkspaceSearchRequest,
   WorkspaceSearchResult,
+  RecoverySnapshot,
 } from '../shared/desktop-api.types'
 import { IPC_CHANNELS } from '../shared/ipc-channels'
 import type { AppSettings, AppSettingsUpdate } from '../shared/settings'
@@ -77,6 +81,21 @@ export const openMdApi: OpenMdApi = Object.freeze({
     },
     getRecentFiles: () => ipcRenderer.invoke(IPC_CHANNELS.documentsRecent) as Promise<RecentFile[]>,
   }),
+  recovery: Object.freeze({
+    getSnapshot: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.recoveryGetSnapshot) as Promise<RecoverySnapshot>,
+    saveSession: (request: SaveRecoverySessionRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.recoverySaveSession, request) as Promise<void>,
+    clearRecord: (request: ClearRecoveryRecordRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.recoveryClearRecord, request) as Promise<void>,
+    restoreWorkspace: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.recoveryRestoreWorkspace) as ReturnType<
+        OpenMdApi['recovery']['restoreWorkspace']
+      >,
+    discard: () => ipcRenderer.invoke(IPC_CHANNELS.recoveryDiscard) as Promise<void>,
+    completeSession: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.recoveryCompleteSession) as Promise<void>,
+  }),
   images: Object.freeze({
     saveImage: (request: SaveImageRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.imagesSave, request) as Promise<SaveImageResult>,
@@ -93,6 +112,10 @@ export const openMdApi: OpenMdApi = Object.freeze({
     pdf: (request: ExportPdfRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.exportPdf, request) as ReturnType<
         OpenMdApi['exports']['pdf']
+      >,
+    png: (request: ExportPngRequest) =>
+      ipcRenderer.invoke(IPC_CHANNELS.exportPng, request) as ReturnType<
+        OpenMdApi['exports']['png']
       >,
   }),
   workspace: Object.freeze({
@@ -123,6 +146,7 @@ export const openMdApi: OpenMdApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.workspaceCopyRelativePath, request) as Promise<void>,
     search: (request: WorkspaceSearchRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.workspaceSearch, request) as Promise<WorkspaceSearchResult>,
+    cancelSearch: () => ipcRenderer.invoke(IPC_CHANNELS.workspaceSearchCancel) as Promise<void>,
     quickOpen: (request: WorkspaceQuickOpenRequest) =>
       ipcRenderer.invoke(
         IPC_CHANNELS.workspaceQuickOpen,
