@@ -6,11 +6,18 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 import {
   decodeSearchableText,
+  fuzzyFileScore,
   parseWorkspaceContentMatches,
+  searchWorkspaceFileNames,
   searchWorkspaceFiles,
 } from '../src/main/workspace-search'
 
 describe('workspace search result parsing', () => {
+  it('scores fuzzy filename matches in character order', () => {
+    expect(fuzzyFileScore('Typora-Parity.md', 'tpr')).toBeTypeOf('number')
+    expect(fuzzyFileScore('Typora-Parity.md', 'pzm')).toBeUndefined()
+    expect(fuzzyFileScore('docs/phase-two.md', 'pht')).toBeTypeOf('number')
+  })
   it('rejects binary and invalid UTF-8 payloads even with a text extension', () => {
     expect(decodeSearchableText(Uint8Array.from([0x61, 0, 0x62]))).toBeUndefined()
     expect(decodeSearchableText(Uint8Array.from([0xc3, 0x28]))).toBeUndefined()
@@ -113,5 +120,20 @@ describe('bounded asynchronous workspace search', () => {
     await expect(
       searchWorkspaceFiles(rootPath, { query: 'alpha' }, controller.signal),
     ).resolves.toMatchObject({ canceled: true, filesSearched: 0, matches: [] })
+  })
+
+  it('quick-opens fuzzy filenames without reading content and supports cancellation', async () => {
+    const result = await searchWorkspaceFileNames(rootPath, {
+      query: 'an',
+      includeTextFiles: true,
+    })
+    expect(result.matches.map((match) => match.relativePath)).toContain('Alpha-notes.md')
+    expect(result.matches.some((match) => match.relativePath.includes('.git'))).toBe(false)
+
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      searchWorkspaceFileNames(rootPath, { query: '' }, controller.signal),
+    ).resolves.toMatchObject({ canceled: true, matches: [] })
   })
 })

@@ -7,6 +7,11 @@ export interface AppInfo {
   platform: string
 }
 
+export interface AppCommandState {
+  focusMode: boolean
+  typewriterMode: boolean
+}
+
 export interface OpenExternalUrlRequest {
   url: string
 }
@@ -161,6 +166,26 @@ export interface WorkspaceSearchResult {
   canceled?: boolean
 }
 
+export interface WorkspaceQuickOpenRequest {
+  query: string
+  includeTextFiles?: boolean
+  maxResults?: number
+}
+
+export interface WorkspaceQuickOpenMatch {
+  filePath: string
+  relativePath: string
+  name: string
+  score: number
+}
+
+export interface WorkspaceQuickOpenResult {
+  matches: WorkspaceQuickOpenMatch[]
+  filesScanned: number
+  truncated: boolean
+  canceled?: boolean
+}
+
 export interface WorkspaceFileChange {
   type: 'changed' | 'deleted'
   filePath: string
@@ -181,6 +206,8 @@ export interface WorkspaceApi {
   revealEntry: (request: WorkspacePathRequest) => Promise<void>
   copyRelativePath: (request: WorkspacePathRequest) => Promise<void>
   search: (request: WorkspaceSearchRequest) => Promise<WorkspaceSearchResult>
+  quickOpen: (request: WorkspaceQuickOpenRequest) => Promise<WorkspaceQuickOpenResult>
+  cancelQuickOpen: () => Promise<void>
   onFileChange: (listener: (change: WorkspaceFileChange) => void) => () => void
 }
 
@@ -267,10 +294,24 @@ export type EditorCommand =
   | { type: 'toggle-editor-mode' }
   | { type: 'toggle-source-line-numbers' }
   | { type: 'toggle-source-line-wrapping' }
+  | { type: 'find' }
+  | { type: 'replace' }
+  | { type: 'toggle-focus-mode' }
+  | { type: 'toggle-typewriter-mode' }
 
-export type WorkspaceCommand = { type: 'open-workspace' } | { type: 'search-workspace' }
+export type WorkspaceCommand =
+  | { type: 'open-workspace' }
+  | { type: 'search-workspace' }
+  | { type: 'quick-open' }
 
-export type RendererCommand = DocumentCommand | EditorCommand | WorkspaceCommand
+export type WindowCommand =
+  | { type: 'close-tab' }
+  | { type: 'reopen-closed-tab' }
+  | { type: 'next-tab' }
+  | { type: 'previous-tab' }
+  | { type: 'open-settings' }
+
+export type RendererCommand = DocumentCommand | EditorCommand | WorkspaceCommand | WindowCommand
 
 export interface DocumentsApi {
   ready: () => Promise<void>
@@ -282,10 +323,12 @@ export interface DocumentsApi {
   reload: () => Promise<void>
   resolveClose: (request: ResolveCloseRequest) => Promise<void>
   onCommand: (listener: (command: RendererCommand) => void) => () => void
+  getRecentFiles: () => Promise<RecentFile[]>
 }
 
 export interface OpenMdApi {
   getAppInfo: () => Promise<AppInfo>
+  updateCommandState: (state: AppCommandState) => Promise<void>
   openExternalUrl: (request: OpenExternalUrlRequest) => Promise<void>
   documents: DocumentsApi
   images: ImagesApi

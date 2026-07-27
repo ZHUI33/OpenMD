@@ -172,6 +172,10 @@ export class DocumentService {
     await this.recentFiles.whenIdle()
   }
 
+  async getRecentFiles(): Promise<RecentFile[]> {
+    return this.recentFiles.getRecentFiles()
+  }
+
   async openDocument(
     parentWindow: BrowserWindow,
     request: OpenDocumentRequest,

@@ -9,6 +9,7 @@ import type {
   WorkspaceInfo,
   WorkspaceSearchMatch,
 } from '../../shared/desktop-api.types'
+import { APP_COMMANDS, eventMatchesCommand } from '../../shared/commands'
 import { DEFAULT_SETTINGS, getAutoSaveSettings } from '../../shared/settings'
 import type { AppSettings, AppSettingsUpdate, BuiltInTheme } from '../../shared/settings'
 import type { SidebarPanel } from '../../shared/settings'
@@ -16,15 +17,22 @@ import { FileConflictDialog } from './components/FileConflictDialog'
 import { ExportDialog } from './components/ExportDialog'
 import type { PdfExportOptions } from './components/ExportDialog'
 import { SettingsDialog } from './components/SettingsDialog'
+import { FindReplaceBar } from './components/FindReplaceBar'
 import { NavigationSidebar } from './components/NavigationSidebar'
 import { OutlinePanel } from './components/OutlinePanel'
 import { StatusBar } from './components/StatusBar'
 import { TabBar } from './components/TabBar'
 import { TitleBar } from './components/TitleBar'
+import { QuickOpen } from './components/QuickOpen'
 import { WorkspaceSearch } from './components/WorkspaceSearch'
 import { WorkspaceSidebar } from './components/WorkspaceSidebar'
 import { OpenMdEditor } from './editor/OpenMdEditor'
-import type { OpenMdEditorHandle, ResolvedTheme } from './editor/editor.types'
+import type {
+  DocumentSearchQuery,
+  DocumentSearchStatus,
+  OpenMdEditorHandle,
+  ResolvedTheme,
+} from './editor/editor.types'
 import type { OutlineItem } from './editor/outline-feature'
 import { resolveExternalFileChange } from './external-file-state'
 import { buildStandaloneHtml } from './export-document'
@@ -88,6 +96,14 @@ function App(): JSX.Element {
   const saveQueueRef = useRef(new DocumentSaveQueue())
   const autoSaveTimersRef = useRef(new Map<string, { timer: number; signature: string }>())
   const toastSequenceRef = useRef(0)
+  const searchOpenRef = useRef(false)
+  const searchQueryRef = useRef<DocumentSearchQuery>({
+    query: '',
+    replacement: '',
+    caseSensitive: false,
+    wholeWord: false,
+    regularExpression: false,
+  })
   const commandHandlerRef = useRef<(command: RendererCommand) => Promise<void>>(
     async () => undefined,
   )
@@ -108,8 +124,18 @@ function App(): JSX.Element {
   const [exportMode, setExportMode] = useState<'html' | 'pdf'>()
   const [exportBusy, setExportBusy] = useState(false)
   const [exportError, setExportError] = useState<string>()
+  const [quickOpen, setQuickOpen] = useState(false)
+  const [findOpen, setFindOpen] = useState(false)
+  const [replaceVisible, setReplaceVisible] = useState(false)
+  const [searchQuery, setSearchQuery] = useState<DocumentSearchQuery>(searchQueryRef.current)
+  const [searchStatus, setSearchStatus] = useState<DocumentSearchStatus>({
+    current: 0,
+    total: 0,
+  })
 
   activeTabIdRef.current = activeTabId
+  searchOpenRef.current = findOpen
+  searchQueryRef.current = searchQuery
 
   const showToast = useCallback((message: string, kind: ToastState['kind'] = 'info'): void => {
     toastSequenceRef.current += 1
@@ -155,6 +181,7 @@ function App(): JSX.Element {
     store.updateTabMarkdown(tabId, markdown)
     store.setTabEditorMode(tabId, editor.getMode())
     store.setTabScrollPosition(tabId, editor.getScrollPosition?.())
+    store.setTabCursorAnchor(tabId, editor.getCursorAnchor?.())
   }, [])
 
   const displayTab = useCallback(async (tabId: string, revealLine?: number): Promise<void> => {
@@ -174,7 +201,9 @@ function App(): JSX.Element {
       await editor.setMode(tab.editorMode)
       await editor.whenIdle()
       if (generation !== displayGenerationRef.current) return
+      if (tab.cursorAnchor) editor.restoreCursorAnchor?.(tab.cursorAnchor)
       editor.setScrollPosition?.(tab.scrollPosition ?? 0)
+      if (searchOpenRef.current) editor.setSearchQuery(searchQueryRef.current)
       if (revealLine !== undefined) editor.revealLine?.(revealLine)
       else editor.focus()
     } finally {
@@ -615,6 +644,52 @@ function App(): JSX.Element {
     [captureActiveEditor, confirmTabs, displayTab, ensureOneTab],
   )
 
+  const switchTabByOffset = useCallback(
+    async (offset: 1 | -1): Promise<void> => {
+      const store = useEditorTabsStore.getState()
+      if (store.tabs.length < 2 || !store.activeTabId) return
+      const activeIndex = store.tabs.findIndex((tab) => tab.id === store.activeTabId)
+      const targetIndex = (activeIndex + offset + store.tabs.length) % store.tabs.length
+      const target = store.tabs[targetIndex]
+      if (target) await switchToTab(target.id)
+    },
+    [switchToTab],
+  )
+
+  const restoreRecentlyClosedTab = useCallback(async (): Promise<void> => {
+    captureActiveEditor()
+    const store = useEditorTabsStore.getState()
+    const closed = store.recentlyClosedTabs[0]
+    if (!closed) {
+      showToast('没有可恢复的标签。')
+      return
+    }
+
+    let diskMarkdown: string | undefined
+    if (closed.tab.filePath) {
+      const duplicate = findTabByPath(store.tabs, closed.tab.filePath)
+      if (!duplicate) {
+        try {
+          const result = await window.openmd.documents.openDocument({
+            filePath: closed.tab.filePath,
+          })
+          if (result.canceled || result.error || result.content === undefined) return
+          diskMarkdown = result.content
+        } catch (error) {
+          showToast(error instanceof Error ? error.message : '恢复标签失败。', 'error')
+          return
+        }
+      }
+    }
+
+    const result = useEditorTabsStore
+      .getState()
+      .restoreLastClosed(
+        diskMarkdown === undefined ? undefined : { markdown: diskMarkdown, dirty: false },
+      )
+    if (result) await displayTab(result.tabId)
+  }, [captureActiveEditor, displayTab, showToast])
+
   const reloadActiveFromDisk = useCallback(async (): Promise<void> => {
     captureActiveEditor()
     const tabBeforeConfirmation = useEditorTabsStore
@@ -660,6 +735,17 @@ function App(): JSX.Element {
       }
       useAppStore.getState().setSourceLineNumbers(nextSettings.sourceLineNumbers)
       useAppStore.getState().setSourceLineWrapping(nextSettings.sourceLineWrapping)
+      editorRef.current?.setWritingModes(
+        nextSettings.focusMode,
+        nextSettings.typewriterMode,
+        nextSettings.typewriterBehavior,
+      )
+      void window.openmd
+        .updateCommandState({
+          focusMode: nextSettings.focusMode,
+          typewriterMode: nextSettings.typewriterMode,
+        })
+        .catch(() => undefined)
     },
     [settings, themeController],
   )
@@ -747,19 +833,23 @@ function App(): JSX.Element {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
-      if (!(event.ctrlKey || event.metaKey) || !event.shiftKey) return
-      if (event.key.toLocaleLowerCase('en-US') === 'o') {
-        event.preventDefault()
-        void openWorkspace()
-      } else if (event.key.toLocaleLowerCase('en-US') === 'f') {
-        event.preventDefault()
-        if (workspace) showSidebarPanel('search')
-        else showToast('请先打开一个工作区。')
-      }
+      if (event.isComposing) return
+      const definition = Object.values(APP_COMMANDS).find((candidate) =>
+        eventMatchesCommand(event, candidate),
+      )
+      if (!definition) return
+      event.preventDefault()
+      event.stopPropagation()
+      void commandHandlerRef.current({ type: definition.type } as RendererCommand)
     }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [openWorkspace, showSidebarPanel, showToast, workspace])
+    window.addEventListener('keydown', onKeyDown, true)
+    return () => window.removeEventListener('keydown', onKeyDown, true)
+  }, [])
+
+  useEffect(() => {
+    if (!findOpen) return
+    editorRef.current?.setSearchQuery(searchQuery)
+  }, [activeTabId, findOpen, searchQuery])
 
   useEffect(() => {
     return window.openmd.workspace.onFileChange((change: WorkspaceFileChange) => {
@@ -912,6 +1002,38 @@ function App(): JSX.Element {
         if (workspace) showSidebarPanel('search')
         else showToast('请先打开一个工作区。')
         break
+      case 'quick-open':
+        setQuickOpen(true)
+        break
+      case 'find':
+        setFindOpen(true)
+        setReplaceVisible(false)
+        break
+      case 'replace':
+        setFindOpen(true)
+        setReplaceVisible(true)
+        break
+      case 'close-tab':
+        await closeTabs('current')
+        break
+      case 'reopen-closed-tab':
+        await restoreRecentlyClosedTab()
+        break
+      case 'next-tab':
+        await switchTabByOffset(1)
+        break
+      case 'previous-tab':
+        await switchTabByOffset(-1)
+        break
+      case 'open-settings':
+        setSettingsOpen(true)
+        break
+      case 'toggle-focus-mode':
+        updateSetting({ focusMode: !settings.focusMode })
+        break
+      case 'toggle-typewriter-mode':
+        updateSetting({ typewriterMode: !settings.typewriterMode })
+        break
     }
   }
 
@@ -921,7 +1043,11 @@ function App(): JSX.Element {
     : undefined
 
   return (
-    <div className="app-shell">
+    <div
+      className="app-shell"
+      data-focus-mode={settings.focusMode}
+      data-typewriter-mode={settings.typewriterMode}
+    >
       <TitleBar
         sidebarVisible={settings.sidebarVisible}
         insertImageDisabled={!activeTab || activeTab.editorMode === 'source'}
@@ -994,6 +1120,22 @@ function App(): JSX.Element {
             onCloseRight={(tabId) => void closeTabs('right', tabId)}
           />
           <div className="editor-stage">
+            <FindReplaceBar
+              open={findOpen}
+              replaceVisible={replaceVisible}
+              value={searchQuery}
+              status={searchStatus}
+              onChange={setSearchQuery}
+              onNext={(direction) => editorRef.current?.findNext(direction)}
+              onReplace={() => editorRef.current?.replaceCurrent()}
+              onReplaceAll={() => editorRef.current?.replaceAll()}
+              onClose={() => {
+                setFindOpen(false)
+                setSearchStatus({ current: 0, total: 0 })
+                editorRef.current?.clearSearch()
+                editorRef.current?.focus()
+              }}
+            />
             {activeTab && deletedTabIds.has(activeTab.id) ? (
               <div className="deleted-file-banner" role="status">
                 <span>此文件已从磁盘删除，标签中的内容仍被保留。</span>
@@ -1035,6 +1177,10 @@ function App(): JSX.Element {
               }}
               onOutlineChange={setOutline}
               onActiveHeadingChange={setActiveHeadingId}
+              onSearchStatusChange={setSearchStatus}
+              focusMode={settings.focusMode}
+              typewriterMode={settings.typewriterMode}
+              typewriterBehavior={settings.typewriterBehavior}
               onError={(message) => showToast(message, 'error')}
             />
           </div>
@@ -1048,6 +1194,17 @@ function App(): JSX.Element {
         settingsApi={settingsApi}
         themeController={null}
         onApplied={applyRuntimeSettings}
+      />
+
+      <QuickOpen
+        open={quickOpen}
+        hasWorkspace={Boolean(workspace)}
+        includeTextFiles={settings.showTextFiles}
+        workspaceApi={window.openmd.workspace}
+        getRecentFiles={window.openmd.documents.getRecentFiles}
+        onOpenWorkspaceFile={(relativePath) => void openWorkspaceFile(relativePath)}
+        onOpenRecentFile={(filePath) => void openDocument(filePath)}
+        onClose={() => setQuickOpen(false)}
       />
 
       {exportMode && activeTab ? (

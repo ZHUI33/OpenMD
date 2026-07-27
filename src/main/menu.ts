@@ -1,9 +1,37 @@
 import { app, Menu } from 'electron'
 import type { MenuItemConstructorOptions } from 'electron'
 
-import type { RecentFile, RendererCommand } from '../shared/desktop-api.types'
+import { APP_COMMANDS } from '../shared/commands'
+import type { AppCommandType } from '../shared/commands'
+import type { AppCommandState, RecentFile, RendererCommand } from '../shared/desktop-api.types'
 
 export type SendDocumentCommand = (command: RendererCommand) => void
+
+let currentCommandState: AppCommandState = { focusMode: false, typewriterMode: false }
+
+function commandItem(
+  type: AppCommandType,
+  sendCommand: SendDocumentCommand,
+  options: Partial<MenuItemConstructorOptions> = {},
+): MenuItemConstructorOptions {
+  const definition = APP_COMMANDS[type]
+  return {
+    id: definition.id,
+    label: definition.label,
+    accelerator: definition.accelerator,
+    click: () => sendCommand({ type } as RendererCommand),
+    ...options,
+  }
+}
+
+export function updateApplicationMenuCommandState(state: AppCommandState): void {
+  currentCommandState = { ...state }
+  const menu = Menu.getApplicationMenu()
+  const focusItem = menu?.getMenuItemById(APP_COMMANDS['toggle-focus-mode'].id)
+  const typewriterItem = menu?.getMenuItemById(APP_COMMANDS['toggle-typewriter-mode'].id)
+  if (focusItem) focusItem.checked = state.focusMode
+  if (typewriterItem) typewriterItem.checked = state.typewriterMode
+}
 
 function createRecentFilesSubmenu(
   recentFiles: readonly RecentFile[],
@@ -26,53 +54,30 @@ export function installApplicationMenu(
 ): void {
   const isMac = process.platform === 'darwin'
   const fileSubmenu: MenuItemConstructorOptions[] = [
-    {
-      id: 'openmd-document-new',
-      label: '新建',
-      accelerator: 'CmdOrCtrl+N',
-      click: () => sendCommand({ type: 'new' }),
-    },
-    {
-      label: '打开…',
-      accelerator: 'CmdOrCtrl+O',
-      click: () => sendCommand({ type: 'open' }),
-    },
-    {
-      label: '打开文件夹工作区…',
-      accelerator: 'CmdOrCtrl+Shift+O',
-      click: () => sendCommand({ type: 'open-workspace' }),
-    },
+    commandItem('new', sendCommand, { id: 'openmd-document-new' }),
+    commandItem('open', sendCommand),
+    commandItem('open-workspace', sendCommand),
+    commandItem('quick-open', sendCommand),
     {
       label: '最近打开',
       submenu: createRecentFilesSubmenu(recentFiles, sendCommand),
     },
     { type: 'separator' },
-    {
-      id: 'openmd-document-save',
-      label: '保存',
-      accelerator: 'CmdOrCtrl+S',
-      click: () => sendCommand({ type: 'save' }),
-    },
-    {
-      label: '另存为…',
-      accelerator: 'CmdOrCtrl+Shift+S',
-      click: () => sendCommand({ type: 'save-as' }),
-    },
+    commandItem('save', sendCommand, { id: 'openmd-document-save' }),
+    commandItem('save-as', sendCommand),
     { type: 'separator' },
-    {
-      label: '导出 HTML…',
-      accelerator: 'CmdOrCtrl+Alt+H',
-      click: () => sendCommand({ type: 'export-html' }),
-    },
-    {
-      label: '导出 PDF…',
-      accelerator: 'CmdOrCtrl+Alt+P',
-      click: () => sendCommand({ type: 'export-pdf' }),
-    },
+    commandItem('close-tab', sendCommand),
+    commandItem('reopen-closed-tab', sendCommand),
+    { type: 'separator' },
+    commandItem('export-html', sendCommand),
+    commandItem('export-pdf', sendCommand),
   ]
 
   if (isMac) {
-    fileSubmenu.push({ type: 'separator' }, { label: '关闭窗口', role: 'close' })
+    fileSubmenu.push(
+      { type: 'separator' },
+      { label: '关闭窗口', role: 'close', accelerator: 'Cmd+Shift+W' },
+    )
   } else {
     fileSubmenu.push(
       { type: 'separator' },
@@ -90,6 +95,8 @@ export function installApplicationMenu(
             label: app.name,
             submenu: [
               { role: 'about' as const },
+              { type: 'separator' as const },
+              commandItem('open-settings', sendCommand),
               { type: 'separator' as const },
               { role: 'services' as const },
               { type: 'separator' as const },
@@ -114,36 +121,25 @@ export function installApplicationMenu(
         { label: '粘贴', role: 'paste' },
         { label: '全选', role: 'selectAll' },
         { type: 'separator' },
-        {
-          label: '在工作区中搜索',
-          accelerator: 'CmdOrCtrl+Shift+F',
-          click: () => sendCommand({ type: 'search-workspace' }),
-        },
+        commandItem('find', sendCommand),
+        commandItem('replace', sendCommand),
+        commandItem('search-workspace', sendCommand),
       ],
     },
     {
       label: '视图',
       submenu: [
-        {
-          id: 'openmd-toggle-editor-mode',
-          label: '切换编辑模式',
-          accelerator: 'CmdOrCtrl+/',
-          click: () => sendCommand({ type: 'toggle-editor-mode' }),
-        },
-        {
-          label: '切换源码行号',
-          click: () => sendCommand({ type: 'toggle-source-line-numbers' }),
-        },
-        {
-          label: '切换长行自动换行',
-          click: () => sendCommand({ type: 'toggle-source-line-wrapping' }),
-        },
+        commandItem('toggle-editor-mode', sendCommand, { id: 'openmd-toggle-editor-mode' }),
+        commandItem('toggle-source-line-numbers', sendCommand),
+        commandItem('toggle-source-line-wrapping', sendCommand),
         { type: 'separator' },
-        {
-          label: '重新加载',
-          accelerator: 'CmdOrCtrl+R',
-          click: () => sendCommand({ type: 'reload' }),
-        },
+        commandItem('toggle-focus-mode', sendCommand, { type: 'checkbox' }),
+        commandItem('toggle-typewriter-mode', sendCommand, { type: 'checkbox' }),
+        { type: 'separator' },
+        commandItem('next-tab', sendCommand),
+        commandItem('previous-tab', sendCommand),
+        { type: 'separator' },
+        commandItem('reload', sendCommand),
         { label: '开发者工具', role: 'toggleDevTools' },
         { type: 'separator' },
         { label: '放大', role: 'zoomIn' },
@@ -154,5 +150,12 @@ export function installApplicationMenu(
     ...(isMac ? [{ role: 'windowMenu' as const }] : []),
   ]
 
+  if (!isMac) {
+    fileSubmenu.splice(fileSubmenu.length - 2, 0, commandItem('open-settings', sendCommand), {
+      type: 'separator',
+    })
+  }
+
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+  updateApplicationMenuCommandState(currentCommandState)
 }

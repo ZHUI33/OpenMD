@@ -61,6 +61,7 @@ describe('editor tabs store', () => {
     actions.updateTabMarkdown('one', 'changed')
     actions.setTabEditorMode('one', 'source')
     actions.setTabScrollPosition('one', 420)
+    actions.setTabCursorAnchor('one', { offset: 18, blockIndex: 2 })
 
     expect(useEditorTabsStore.getState().tabs).toEqual([
       expect.objectContaining({
@@ -69,6 +70,7 @@ describe('editor tabs store', () => {
         dirty: true,
         editorMode: 'source',
         scrollPosition: 420,
+        cursorAnchor: { offset: 18, blockIndex: 2 },
       }),
       expect.objectContaining({
         id: 'two',
@@ -78,6 +80,33 @@ describe('editor tabs store', () => {
         scrollPosition: undefined,
       }),
     ])
+  })
+
+  it('restores the most recently closed tab with its mode, selection and scroll state', () => {
+    openTab('one')
+    openTab('two')
+    const actions = useEditorTabsStore.getState()
+    actions.setTabEditorMode('two', 'source')
+    actions.setTabScrollPosition('two', 640)
+    actions.setTabCursorAnchor('two', { offset: 24, headingText: '第二节' })
+    actions.closeTabs('current', { discardDirty: true })
+
+    expect(useEditorTabsStore.getState().recentlyClosedTabs[0]?.tab).toMatchObject({
+      id: 'two',
+      editorMode: 'source',
+      scrollPosition: 640,
+      cursorAnchor: { offset: 24, headingText: '第二节' },
+    })
+    expect(useEditorTabsStore.getState().restoreLastClosed()).toEqual({
+      tabId: 'two',
+      opened: true,
+    })
+    expect(useEditorTabsStore.getState().tabs.at(-1)).toMatchObject({
+      id: 'two',
+      editorMode: 'source',
+      scrollPosition: 640,
+      cursorAnchor: { offset: 24, headingText: '第二节' },
+    })
   })
 
   it('keeps later edits dirty when an earlier save snapshot completes', () => {

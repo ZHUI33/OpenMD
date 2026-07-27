@@ -461,6 +461,212 @@
   overflow: hidden;
 }
 
+.document-find-bar {
+  position: absolute;
+  z-index: 120;
+  top: 9px;
+  right: 14px;
+  display: grid;
+  width: min(620px, calc(100% - 28px));
+  padding: 6px;
+  grid-template-columns: minmax(180px, 1fr) auto;
+  gap: 5px;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow: var(--shadow-menu);
+  color: var(--foreground);
+}
+
+.document-find-bar__query {
+  position: relative;
+  min-width: 0;
+}
+
+.document-find-bar input {
+  width: 100%;
+  height: 30px;
+  padding: 0 58px 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  outline: none;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 12px;
+}
+
+.document-find-bar input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+.document-find-bar__count {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  color: var(--muted);
+  font-size: 10px;
+  pointer-events: none;
+}
+
+.document-find-bar__actions,
+.document-find-bar__replace {
+  display: flex;
+  min-width: 0;
+  gap: 3px;
+}
+
+.document-find-bar button {
+  height: 30px;
+  min-width: 30px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.document-find-bar button:hover,
+.document-find-bar button:focus-visible,
+.document-find-bar button[aria-pressed='true'] {
+  outline: none;
+  background: var(--primary-soft);
+  color: var(--primary);
+}
+
+.document-find-bar__replace {
+  grid-column: 1 / -1;
+}
+
+.document-find-bar__replace input {
+  min-width: 0;
+  padding-right: 9px;
+  flex: 1;
+}
+
+.document-find-bar__replace button {
+  min-width: max-content;
+}
+
+.document-find-bar__error {
+  grid-column: 1 / -1;
+  color: var(--danger);
+  font-size: 10px;
+}
+
+.quick-open-backdrop {
+  position: fixed;
+  z-index: 2600;
+  inset: 0;
+  display: flex;
+  padding-top: min(15vh, 120px);
+  align-items: flex-start;
+  justify-content: center;
+  background: color-mix(in srgb, var(--dialog-backdrop) 55%, transparent);
+}
+
+.quick-open {
+  display: grid;
+  width: min(680px, calc(100vw - 32px));
+  max-height: min(620px, calc(100vh - 140px));
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  background: var(--surface);
+  box-shadow: var(--shadow-menu);
+}
+
+.quick-open__input {
+  height: 48px;
+  margin: 8px 8px 0;
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  outline: none;
+  background: var(--background);
+  color: var(--foreground);
+  font: inherit;
+  font-size: 15px;
+}
+
+.quick-open__input:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-soft);
+}
+
+.quick-open__summary {
+  min-height: 27px;
+  padding: 7px 13px 5px;
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.quick-open__results {
+  min-height: 80px;
+  overflow-y: auto;
+  border-top: 1px solid var(--border);
+}
+
+.quick-open__result {
+  display: grid;
+  width: 100%;
+  min-height: 52px;
+  padding: 7px 13px;
+  grid-template-rows: auto auto;
+  gap: 3px;
+  border: 0;
+  border-radius: 0;
+  outline: none;
+  background: transparent;
+  color: var(--foreground);
+  cursor: pointer;
+  text-align: left;
+}
+
+.quick-open__result[data-selected='true'],
+.quick-open__result:focus-visible {
+  background: var(--primary-soft);
+}
+
+.quick-open__name,
+.quick-open__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.quick-open__name {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+}
+
+.quick-open__name small {
+  padding: 1px 5px;
+  border-radius: 99px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 9px;
+}
+
+.quick-open__path {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.quick-open__empty {
+  margin: 0;
+  padding: 30px 14px;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: center;
+}
+
 .deleted-file-banner {
   position: absolute;
   z-index: 80;

@@ -2,6 +2,7 @@ import { ipcRenderer } from 'electron'
 
 import type {
   AppInfo,
+  AppCommandState,
   ConfirmCloseRequest,
   ConfirmCloseResult,
   ExportHtmlRequest,
@@ -14,6 +15,7 @@ import type {
   OpenDocumentRequest,
   OpenDocumentResult,
   OpenMdApi,
+  RecentFile,
   OpenExternalUrlRequest,
   ResolveCloseRequest,
   SaveDocumentRequest,
@@ -31,6 +33,8 @@ import type {
   WorkspaceFileResult,
   WorkspaceInfo,
   WorkspacePathRequest,
+  WorkspaceQuickOpenRequest,
+  WorkspaceQuickOpenResult,
   WorkspaceSearchRequest,
   WorkspaceSearchResult,
 } from '../shared/desktop-api.types'
@@ -40,6 +44,8 @@ import type { LoadedUserTheme, UserThemeInfo } from '../shared/theme'
 
 export const openMdApi: OpenMdApi = Object.freeze({
   getAppInfo: () => ipcRenderer.invoke(IPC_CHANNELS.appGetInfo) as Promise<AppInfo>,
+  updateCommandState: (state: AppCommandState) =>
+    ipcRenderer.invoke(IPC_CHANNELS.appUpdateCommandState, state) as Promise<void>,
   openExternalUrl: (request: OpenExternalUrlRequest) =>
     ipcRenderer.invoke(IPC_CHANNELS.appOpenExternalUrl, request) as Promise<void>,
   documents: Object.freeze({
@@ -69,6 +75,7 @@ export const openMdApi: OpenMdApi = Object.freeze({
         ipcRenderer.removeListener(IPC_CHANNELS.documentsCommand, ipcListener)
       }
     },
+    getRecentFiles: () => ipcRenderer.invoke(IPC_CHANNELS.documentsRecent) as Promise<RecentFile[]>,
   }),
   images: Object.freeze({
     saveImage: (request: SaveImageRequest) =>
@@ -116,6 +123,13 @@ export const openMdApi: OpenMdApi = Object.freeze({
       ipcRenderer.invoke(IPC_CHANNELS.workspaceCopyRelativePath, request) as Promise<void>,
     search: (request: WorkspaceSearchRequest) =>
       ipcRenderer.invoke(IPC_CHANNELS.workspaceSearch, request) as Promise<WorkspaceSearchResult>,
+    quickOpen: (request: WorkspaceQuickOpenRequest) =>
+      ipcRenderer.invoke(
+        IPC_CHANNELS.workspaceQuickOpen,
+        request,
+      ) as Promise<WorkspaceQuickOpenResult>,
+    cancelQuickOpen: () =>
+      ipcRenderer.invoke(IPC_CHANNELS.workspaceQuickOpenCancel) as Promise<void>,
     onFileChange: (listener: (change: WorkspaceFileChange) => void) => {
       const ipcListener = (
         _event: Electron.IpcRendererEvent,

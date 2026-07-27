@@ -161,6 +161,7 @@ select {
 }
 
 .openmd-editor-scroll {
+  height: 100%;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
@@ -304,6 +305,52 @@ select {
   text-decoration-line: underline;
   text-decoration-thickness: 2px;
   text-underline-offset: 5px;
+}
+
+.openmd-search-match {
+  border-radius: 2px;
+  outline: 1px solid var(--source-search-outline);
+  background: var(--source-search);
+}
+
+.openmd-search-match--current {
+  background: var(--source-search-selected);
+}
+
+.app-shell[data-focus-mode='true']
+  .openmd-editor:focus-within
+  .ProseMirror
+  > :not(.openmd-focus-block) {
+  opacity: 0.32;
+  transition: opacity 120ms ease;
+}
+
+.app-shell[data-focus-mode='true']
+  .openmd-editor:focus-within
+  .ProseMirror
+  > :has(.openmd-focus-block),
+.app-shell[data-focus-mode='true'] .openmd-editor:focus-within .ProseMirror > .openmd-focus-block {
+  opacity: 1;
+}
+
+.app-shell[data-focus-mode='true']
+  .openmd-source-editor:focus-within
+  .cm-content
+  .cm-line:not(.cm-activeLine) {
+  opacity: 0.32;
+  transition: opacity 120ms ease;
+}
+
+.app-shell[data-focus-mode='true'] .openmd-source-editor:focus-within .cm-content .cm-activeLine {
+  opacity: 1;
+}
+
+.app-shell[data-typewriter-mode='true'] .openmd-editor {
+  padding-bottom: 50vh;
+}
+
+.app-shell[data-typewriter-mode='true'] .openmd-source-editor .cm-content {
+  padding-bottom: 50vh;
 }
 
 .openmd-math-inline {

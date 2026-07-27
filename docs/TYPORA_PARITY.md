@@ -59,3 +59,24 @@
 - 视觉检查：`docs/images/typora-parity-light.png`、
   `docs/images/typora-parity-dark.png`、`docs/images/typora-parity-narrow.png`。
 - 缩放检查：截图脚本在 100%、125%、150% 下断言根视口无横向溢出。
+
+## 第二阶段交付矩阵
+
+| 能力              | 实现                                                                                                                                                     | 验证                                                                                             | 状态   |
+| ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ | ------ |
+| 当前文档查找/替换 | 所见即所得模式使用 ProseMirror transaction 与 decorations；源码模式接入 CodeMirror 搜索状态；统一界面提供计数、上下项、大小写、全词、正则、单项/全部替换 | 纯匹配单测、ProseMirror 节点/链接刷新与撤销测试、CodeMirror 查找替换与撤销重做测试、Electron E2E | 已完成 |
+| Quick Open        | `Ctrl/Cmd+P` 搜索工作区文件名与最近文件；主进程异步模糊扫描、限制结果并通过 AbortController 中止旧请求                                                   | 模糊评分/忽略目录/中止单测、键盘选择和去重 E2E                                                   | 已完成 |
+| 标签页快捷操作    | 关闭、前后切换、恢复最近关闭标签；标签状态保存编辑模式、光标锚点和滚动位置                                                                               | store 单测、确认流程沿用现有路径、Electron E2E                                                   | 已完成 |
+| 专注模式          | F8、设置与 View 菜单共用命令；ProseMirror 当前块与 CodeMirror 当前行保持正常对比度；仅用 opacity，不隐藏可访问性树                                       | 插件单测、焦点离开正文时恢复对比度 E2E、重启持久化 E2E                                           | 已完成 |
+| 打字机模式        | F9；“仅输入时居中/始终居中”；Milkdown 与 CodeMirror 均在 requestAnimationFrame 内读取光标坐标并调整滚动容器                                              | 两种编辑模式输入、中文 composition、标签滚动恢复和重启持久化 E2E                                 | 已完成 |
+| 命令与快捷键      | Electron 菜单和 Renderer 键盘处理共用 `shared/commands.ts`；设置支持 `Ctrl/Cmd+,`，模式切换保留 `Ctrl/Cmd+/`                                             | 命令匹配与平台显示单测、菜单集成测试、Electron E2E                                               | 已完成 |
+
+## 第二阶段验证记录
+
+- 自动化：44 个 Vitest 文件 / 263 项测试通过，覆盖查找匹配与替换、链接/图片/公式节点完整性、
+  源码撤销重做、Quick Open 模糊搜索与取消、最近关闭标签、光标/滚动状态、写作模式和设置迁移。
+- Electron E2E：覆盖可视化/源码查找替换、正则/全词/大小写、Enter/Shift+Enter、
+  中文 composition、两种编辑模式打字机滚动、专注模式焦点暂停、Quick Open 键盘流、标签去重、
+  `Ctrl+Tab`、关闭/恢复、滚动恢复和设置重启持久化。
+- 截图：`docs/images/typora-parity-phase2-find.png`、
+  `docs/images/typora-parity-phase2-quick-open.png`。

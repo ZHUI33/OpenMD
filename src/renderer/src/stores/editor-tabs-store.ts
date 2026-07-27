@@ -1,5 +1,7 @@
 import { create } from 'zustand'
 
+import type { CursorAnchor } from '../editor/editor.types'
+
 export interface EditorTab {
   id: string
   filePath?: string
@@ -8,6 +10,12 @@ export interface EditorTab {
   dirty: boolean
   editorMode: 'visual' | 'source'
   scrollPosition?: number
+  cursorAnchor?: CursorAnchor
+}
+
+export interface ClosedEditorTab {
+  tab: EditorTab
+  savedMarkdown: string
 }
 
 export type CloseTabsScope = 'current' | 'others' | 'right'
@@ -20,6 +28,7 @@ export interface OpenEditorTabInput {
   dirty?: boolean
   editorMode?: EditorTab['editorMode']
   scrollPosition?: number
+  cursorAnchor?: CursorAnchor
 }
 
 export interface CreateUntitledTabOptions {
@@ -27,6 +36,12 @@ export interface CreateUntitledTabOptions {
   markdown?: string
   editorMode?: EditorTab['editorMode']
   scrollPosition?: number
+  cursorAnchor?: CursorAnchor
+}
+
+export interface RestoreClosedTabOptions {
+  markdown?: string
+  dirty?: boolean
 }
 
 export interface OpenTabResult {
@@ -91,6 +106,7 @@ interface EditorTabsState {
   tabs: EditorTab[]
   activeTabId?: string
   savedMarkdownByTabId: Record<string, string>
+  recentlyClosedTabs: ClosedEditorTab[]
 }
 
 interface EditorTabsActions {
@@ -100,10 +116,12 @@ interface EditorTabsActions {
   updateTabMarkdown: (tabId: string, markdown: string) => void
   setTabEditorMode: (tabId: string, editorMode: EditorTab['editorMode']) => void
   setTabScrollPosition: (tabId: string, scrollPosition?: number) => void
+  setTabCursorAnchor: (tabId: string, cursorAnchor?: CursorAnchor) => void
   markTabSaved: (tabId: string, options?: MarkTabSavedOptions) => MarkTabSavedResult
   updateTabFilePath: (tabId: string, filePath?: string, title?: string) => boolean
   getCloseCandidates: (scope: CloseTabsScope, anchorTabId?: string) => EditorTab[]
   closeTabs: (scope: CloseTabsScope, options?: CloseTabsOptions) => CloseTabsResult
+  restoreLastClosed: (options?: RestoreClosedTabOptions) => OpenTabResult | undefined
 }
 
 export type EditorTabsStore = EditorTabsState & EditorTabsActions
@@ -112,6 +130,7 @@ const initialEditorTabsState: EditorTabsState = {
   tabs: [],
   activeTabId: undefined,
   savedMarkdownByTabId: {},
+  recentlyClosedTabs: [],
 }
 
 let fallbackId = 0
@@ -250,6 +269,7 @@ export const useEditorTabsStore = create<EditorTabsStore>((set, get) => ({
       dirty: input.dirty ?? false,
       editorMode: input.editorMode ?? 'visual',
       scrollPosition: input.scrollPosition,
+      cursorAnchor: input.cursorAnchor,
     }
 
     set((current) => ({
@@ -268,6 +288,7 @@ export const useEditorTabsStore = create<EditorTabsStore>((set, get) => ({
       markdown: options.markdown ?? '',
       editorMode: options.editorMode,
       scrollPosition: options.scrollPosition,
+      cursorAnchor: options.cursorAnchor,
     })
     return result.tabId
   },
@@ -298,6 +319,11 @@ export const useEditorTabsStore = create<EditorTabsStore>((set, get) => ({
   setTabScrollPosition: (tabId, scrollPosition) => {
     set((state) => ({
       tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, scrollPosition } : tab)),
+    }))
+  },
+  setTabCursorAnchor: (tabId, cursorAnchor) => {
+    set((state) => ({
+      tabs: state.tabs.map((tab) => (tab.id === tabId ? { ...tab, cursorAnchor } : tab)),
     }))
   },
   markTabSaved: (tabId, options = {}) => {
@@ -413,7 +439,16 @@ export const useEditorTabsStore = create<EditorTabsStore>((set, get) => ({
     const savedMarkdownByTabId = { ...state.savedMarkdownByTabId }
     for (const tabId of closedTabIds) delete savedMarkdownByTabId[tabId]
 
-    set({ tabs: remainingTabs, activeTabId, savedMarkdownByTabId })
+    const closedRecords = [...candidates].reverse().map((tab) => ({
+      tab: { ...tab },
+      savedMarkdown: state.savedMarkdownByTabId[tab.id] ?? tab.markdown,
+    }))
+    set({
+      tabs: remainingTabs,
+      activeTabId,
+      savedMarkdownByTabId,
+      recentlyClosedTabs: [...closedRecords, ...state.recentlyClosedTabs].slice(0, 20),
+    })
     return {
       status: 'closed',
       closed: true,
@@ -425,6 +460,42 @@ export const useEditorTabsStore = create<EditorTabsStore>((set, get) => ({
       activeTabId,
     }
   },
+  restoreLastClosed: (options = {}) => {
+    const state = get()
+    const [closed, ...remainingClosed] = state.recentlyClosedTabs
+    if (!closed) return undefined
+
+    const duplicateTabId = closed.tab.filePath
+      ? findTabIdByPath(state.tabs, closed.tab.filePath)
+      : undefined
+    if (duplicateTabId) {
+      set({ activeTabId: duplicateTabId, recentlyClosedTabs: remainingClosed })
+      return { tabId: duplicateTabId, opened: false }
+    }
+
+    const markdown = options.markdown ?? closed.tab.markdown
+    const savedMarkdown =
+      options.dirty === false
+        ? markdown
+        : options.markdown === undefined
+          ? closed.savedMarkdown
+          : markdown
+    const restored: EditorTab = {
+      ...closed.tab,
+      markdown,
+      dirty: options.dirty ?? markdown !== savedMarkdown,
+    }
+    set({
+      tabs: [...state.tabs, restored],
+      activeTabId: restored.id,
+      savedMarkdownByTabId: {
+        ...state.savedMarkdownByTabId,
+        [restored.id]: savedMarkdown,
+      },
+      recentlyClosedTabs: remainingClosed,
+    })
+    return { tabId: restored.id, opened: true }
+  },
 }))
 
 export function resetEditorTabsStore(): void {
@@ -433,5 +504,6 @@ export function resetEditorTabsStore(): void {
     tabs: [],
     activeTabId: undefined,
     savedMarkdownByTabId: {},
+    recentlyClosedTabs: [],
   })
 }

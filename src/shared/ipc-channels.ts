@@ -1,5 +1,6 @@
 export const IPC_CHANNELS = Object.freeze({
   appGetInfo: 'openmd:app:get-info',
+  appUpdateCommandState: 'openmd:app:update-command-state',
   appOpenExternalUrl: 'openmd:app:open-external-url',
   documentsReady: 'openmd:documents:ready',
   documentsNew: 'openmd:documents:new',
@@ -10,6 +11,7 @@ export const IPC_CHANNELS = Object.freeze({
   documentsReload: 'openmd:documents:reload',
   documentsResolveClose: 'openmd:documents:resolve-close',
   documentsCommand: 'openmd:documents:command',
+  documentsRecent: 'openmd:documents:recent',
   imagesSave: 'openmd:images:save',
   imagesSelect: 'openmd:images:select',
   imagesResolve: 'openmd:images:resolve',
@@ -26,6 +28,8 @@ export const IPC_CHANNELS = Object.freeze({
   workspaceRevealEntry: 'openmd:workspace:reveal-entry',
   workspaceCopyRelativePath: 'openmd:workspace:copy-relative-path',
   workspaceSearch: 'openmd:workspace:search',
+  workspaceQuickOpen: 'openmd:workspace:quick-open',
+  workspaceQuickOpenCancel: 'openmd:workspace:quick-open-cancel',
   workspaceFileChanged: 'openmd:workspace:file-changed',
   settingsGet: 'openmd:settings:get',
   settingsUpdate: 'openmd:settings:update',

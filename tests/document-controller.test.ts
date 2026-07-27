@@ -16,6 +16,7 @@ function createDocumentsApi(): DocumentsApi {
     reload: vi.fn(() => Promise.resolve()),
     resolveClose: vi.fn(() => Promise.resolve()),
     onCommand: vi.fn(() => () => undefined),
+    getRecentFiles: vi.fn(async () => []),
   }
 }
 
@@ -61,6 +62,12 @@ describe('document controller', () => {
       toggleSourceLineNumbers: vi.fn(),
       toggleSourceLineWrapping: vi.fn(),
       whenIdle: vi.fn(async () => undefined),
+      setSearchQuery: vi.fn(),
+      findNext: vi.fn(),
+      replaceCurrent: vi.fn(),
+      replaceAll: vi.fn(),
+      clearSearch: vi.fn(),
+      setWritingModes: vi.fn(),
     }
     controller = new DocumentController(api, () => editor)
     setDocument('saved content', 'C:\\notes\\draft.md', editorMarkdown)

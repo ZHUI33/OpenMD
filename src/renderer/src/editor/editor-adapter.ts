@@ -28,8 +28,16 @@ import { createOpenMdMermaidFeature } from './mermaid-feature'
 import type { OutlineItem } from './outline-feature'
 import { openMdTableFeatures, openMdTablePlugins } from './table-feature'
 import { createDocumentOutlineFeature } from './toc-feature'
-import type { CursorAnchor, EditorDocumentAdapter } from './editor.types'
+import type {
+  CursorAnchor,
+  DocumentSearchQuery,
+  DocumentSearchStatus,
+  EditorDocumentAdapter,
+} from './editor.types'
 import { createOpenMdFormattingFeature } from './formatting-feature'
+import { createDocumentSearchFeature } from './search-feature'
+import { createWritingModesFeature } from './writing-modes-feature'
+import type { TypewriterBehavior } from '../../../shared/settings'
 
 export interface EditorAdapterOptions {
   root: HTMLElement
@@ -43,6 +51,10 @@ export interface EditorAdapterOptions {
   onActiveHeadingChange?: (id: string | null) => void
   openExternalUrl?: (url: string) => Promise<void>
   onError?: (message: string) => void
+  onSearchStatusChange?: (status: DocumentSearchStatus) => void
+  focusMode?: boolean
+  typewriterMode?: boolean
+  typewriterBehavior?: TypewriterBehavior
 }
 
 const unavailableImagesApi: RendererImagesApi = {
@@ -64,6 +76,8 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
   private readonly mermaidFeature = createOpenMdMermaidFeature()
   private readonly outlineFeature = createDocumentOutlineFeature({ viewportOffset: 72 })
   private readonly formattingFeature: ReturnType<typeof createOpenMdFormattingFeature>
+  private readonly searchFeature: ReturnType<typeof createDocumentSearchFeature>
+  private readonly writingModesFeature: ReturnType<typeof createWritingModesFeature>
   private readonly unsubscribeOutline: Array<() => void>
   private markdown: string
   private markdownDocument: ProseMirrorNode | null = null
@@ -116,6 +130,12 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
         options.openExternalUrl ?? (async () => Promise.reject(new Error('外部链接服务不可用。'))),
       onError: options.onError,
     })
+    this.searchFeature = createDocumentSearchFeature(options.onSearchStatusChange)
+    this.writingModesFeature = createWritingModesFeature({
+      focusMode: options.focusMode ?? false,
+      typewriterMode: options.typewriterMode ?? false,
+      typewriterBehavior: options.typewriterBehavior ?? 'input',
+    })
     this.crepe = new Crepe({
       root: options.root,
       defaultValue: options.initialMarkdown,
@@ -160,6 +180,8 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
     this.crepe.editor.use(this.mermaidFeature.plugins)
     this.crepe.editor.use(this.outlineFeature.plugins)
     this.crepe.editor.use(this.formattingFeature)
+    this.crepe.editor.use(this.searchFeature.plugin)
+    this.crepe.editor.use(this.writingModesFeature.plugin)
 
     this.crepe.setReadonly(options.readOnly).on((listener) => {
       listener.markdownUpdated((ctx, markdown) => {
@@ -382,6 +404,40 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
       }
       const selection = TextSelection.near(document.resolve(position), 1)
       view.dispatch(view.state.tr.setSelection(selection).scrollIntoView())
+    })
+  }
+
+  setSearchQuery(query: DocumentSearchQuery): void {
+    this.searchFeature.controller.setQuery(query)
+  }
+
+  findNext(direction: 1 | -1 = 1): void {
+    this.searchFeature.controller.next(direction)
+  }
+
+  replaceCurrent(): void {
+    this.finishProgrammaticUpdate()
+    this.searchFeature.controller.replaceCurrent()
+  }
+
+  replaceAll(): void {
+    this.finishProgrammaticUpdate()
+    this.searchFeature.controller.replaceAll()
+  }
+
+  clearSearch(): void {
+    this.searchFeature.controller.clear()
+  }
+
+  setWritingModes(
+    focusMode: boolean,
+    typewriterMode: boolean,
+    typewriterBehavior: TypewriterBehavior,
+  ): void {
+    this.writingModesFeature.controller.setConfiguration({
+      focusMode,
+      typewriterMode,
+      typewriterBehavior,
     })
   }
 

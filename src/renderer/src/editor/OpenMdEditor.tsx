@@ -35,6 +35,10 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
     onEnsureDocumentSaved,
     onOutlineChange,
     onActiveHeadingChange,
+    onSearchStatusChange,
+    focusMode = false,
+    typewriterMode = false,
+    typewriterBehavior = 'input',
     onError,
   },
   forwardedRef,
@@ -59,6 +63,10 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
   const ensureDocumentSavedRef = useRef(onEnsureDocumentSaved)
   const onOutlineChangeRef = useRef(onOutlineChange)
   const onActiveHeadingChangeRef = useRef(onActiveHeadingChange)
+  const onSearchStatusChangeRef = useRef(onSearchStatusChange)
+  const focusModeRef = useRef(focusMode)
+  const typewriterModeRef = useRef(typewriterMode)
+  const typewriterBehaviorRef = useRef(typewriterBehavior)
   const onErrorRef = useRef(onError)
   const [mode, setModeState] = useState<EditorMode>(initialMode)
   const [switching, setSwitching] = useState(true)
@@ -73,6 +81,10 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
   ensureDocumentSavedRef.current = onEnsureDocumentSaved
   onOutlineChangeRef.current = onOutlineChange
   onActiveHeadingChangeRef.current = onActiveHeadingChange
+  onSearchStatusChangeRef.current = onSearchStatusChange
+  focusModeRef.current = focusMode
+  typewriterModeRef.current = typewriterMode
+  typewriterBehaviorRef.current = typewriterBehavior
   onErrorRef.current = onError
   resolvedThemeRef.current = resolvedTheme
 
@@ -107,6 +119,11 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
             previous.adapter.setLineWrapping(sourceLineWrappingRef.current)
             previous.adapter.setTheme(resolvedThemeRef.current)
           }
+          previous.adapter.setWritingModes(
+            focusModeRef.current,
+            typewriterModeRef.current,
+            typewriterBehaviorRef.current,
+          )
           coordinator.markReady(previous.adapter)
           setSwitching(false)
         }
@@ -144,6 +161,14 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
               onActiveHeadingChangeRef.current?.(id)
             }
           },
+          onSearchStatusChange: (status) => {
+            if (mountedEditorRef.current?.adapter === adapter) {
+              onSearchStatusChangeRef.current?.(status)
+            }
+          },
+          focusMode: focusModeRef.current,
+          typewriterMode: typewriterModeRef.current,
+          typewriterBehavior: typewriterBehaviorRef.current,
           openExternalUrl: (url) => window.openmd.openExternalUrl({ url }),
           onError: (message) => onErrorRef.current?.(message),
           onChange: (markdown) => coordinator.acceptChange(adapter, markdown),
@@ -162,6 +187,14 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
               onSourceCursorChangeRef.current?.(position)
             }
           },
+          onSearchStatusChange: (status) => {
+            if (mountedEditorRef.current?.adapter === adapter) {
+              onSearchStatusChangeRef.current?.(status)
+            }
+          },
+          focusMode: focusModeRef.current,
+          typewriterMode: typewriterModeRef.current,
+          typewriterBehavior: typewriterBehaviorRef.current,
         })
       }
 
@@ -246,6 +279,9 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
         mountedEditorRef.current?.adapter.setReadOnly(nextReadOnly)
       },
       focus: () => coordinatorRef.current!.focus(),
+      getCursorAnchor: () => mountedEditorRef.current?.adapter.getCursorAnchor?.(),
+      restoreCursorAnchor: (anchor) =>
+        mountedEditorRef.current?.adapter.restoreCursorAnchor?.(anchor),
       insertImageFromPicker: async () => {
         const mountedEditor = mountedEditorRef.current
         if (mountedEditor?.mode === 'visual') await mountedEditor.adapter.insertImageFromPicker()
@@ -267,6 +303,21 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
         const mountedEditor = mountedEditorRef.current
         if (mountedEditor?.mode === 'source') mountedEditor.adapter.setLineWrapping(enabled)
         onSourceLineWrappingChangeRef.current?.(enabled)
+      },
+      setSearchQuery: (query) => mountedEditorRef.current?.adapter.setSearchQuery?.(query),
+      findNext: (direction = 1) => mountedEditorRef.current?.adapter.findNext?.(direction),
+      replaceCurrent: () => mountedEditorRef.current?.adapter.replaceCurrent?.(),
+      replaceAll: () => mountedEditorRef.current?.adapter.replaceAll?.(),
+      clearSearch: () => mountedEditorRef.current?.adapter.clearSearch?.(),
+      setWritingModes: (nextFocusMode, nextTypewriterMode, behavior) => {
+        focusModeRef.current = nextFocusMode
+        typewriterModeRef.current = nextTypewriterMode
+        typewriterBehaviorRef.current = behavior
+        mountedEditorRef.current?.adapter.setWritingModes?.(
+          nextFocusMode,
+          nextTypewriterMode,
+          behavior,
+        )
       },
       getScrollPosition: () => {
         const mountedEditor = mountedEditorRef.current
@@ -353,6 +404,14 @@ export const OpenMdEditor = forwardRef<OpenMdEditorHandle, OpenMdEditorProps>(fu
     const mountedEditor = mountedEditorRef.current
     if (mountedEditor?.mode === 'source') mountedEditor.adapter.setTheme(resolvedTheme)
   }, [resolvedTheme])
+
+  useEffect(() => {
+    mountedEditorRef.current?.adapter.setWritingModes?.(
+      focusMode,
+      typewriterMode,
+      typewriterBehavior,
+    )
+  }, [focusMode, typewriterBehavior, typewriterMode])
 
   return (
     <div className="openmd-editor-layout" data-mode={mode} data-switching={switching}>

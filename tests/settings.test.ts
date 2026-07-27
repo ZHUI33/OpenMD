@@ -40,6 +40,9 @@ describe('settings defaults and migration', () => {
       sidebarVisible: true,
       sidebarWidth: 999,
       sidebarPanel: 'outline',
+      focusMode: true,
+      typewriterMode: true,
+      typewriterBehavior: 'always',
     })
 
     expect(settings).toMatchObject({
@@ -60,6 +63,9 @@ describe('settings defaults and migration', () => {
       sidebarVisible: true,
       sidebarWidthPx: 420,
       sidebarPanel: 'outline',
+      focusMode: true,
+      typewriterMode: true,
+      typewriterBehavior: 'always',
     })
   })
 
@@ -79,6 +85,9 @@ describe('settings defaults and migration', () => {
     expect(() => applySettingsUpdate(DEFAULT_SETTINGS, { sidebarPanel: 'history' })).toThrow(
       'sidebar panel',
     )
+    expect(() =>
+      applySettingsUpdate(DEFAULT_SETTINGS, { typewriterBehavior: 'sometimes' }),
+    ).toThrow('typewriter behavior')
   })
 
   it('migrates schema 3 settings with safe sidebar defaults', () => {
@@ -114,6 +123,9 @@ describe('settings service persistence', () => {
       sidebarVisible: true,
       sidebarWidthPx: 336,
       sidebarPanel: 'search',
+      focusMode: true,
+      typewriterMode: true,
+      typewriterBehavior: 'always',
     })
 
     const reloaded = await new SettingsService(settingsPath).getSettings()
@@ -125,6 +137,9 @@ describe('settings service persistence', () => {
       sidebarVisible: true,
       sidebarWidthPx: 336,
       sidebarPanel: 'search',
+      focusMode: true,
+      typewriterMode: true,
+      typewriterBehavior: 'always',
     })
     expect(JSON.parse(await readFile(settingsPath, 'utf8'))).toEqual(reloaded)
   })

@@ -2,6 +2,9 @@ import { opendir, readFile, realpath, stat } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 
 import type {
+  WorkspaceQuickOpenMatch,
+  WorkspaceQuickOpenRequest,
+  WorkspaceQuickOpenResult,
   WorkspaceSearchMatch,
   WorkspaceSearchRequest,
   WorkspaceSearchResult,
@@ -72,6 +75,28 @@ export function parseWorkspaceContentMatches(
 function isSearchableFile(filePath: string, includeTextFiles: boolean): boolean {
   const extension = extname(filePath).toLocaleLowerCase('en-US')
   return MARKDOWN_EXTENSIONS.has(extension) || (includeTextFiles && TEXT_EXTENSIONS.has(extension))
+}
+
+export function fuzzyFileScore(value: string, query: string): number | undefined {
+  const candidate = value.normalize('NFKC').toLocaleLowerCase()
+  const needle = query.normalize('NFKC').trim().toLocaleLowerCase()
+  if (!needle) return 0
+
+  let score = 0
+  let candidateIndex = 0
+  let previousMatch = -2
+  for (const character of needle) {
+    const matchIndex = candidate.indexOf(character, candidateIndex)
+    if (matchIndex < 0) return undefined
+    const boundary =
+      matchIndex === 0 || /[\\/_.\-\s]/u.test(candidate.charAt(Math.max(0, matchIndex - 1)))
+    score += boundary ? 18 : 4
+    if (matchIndex === previousMatch + 1) score += 12
+    score -= Math.min(8, matchIndex - candidateIndex)
+    previousMatch = matchIndex
+    candidateIndex = matchIndex + 1
+  }
+  return score - Math.max(0, candidate.length - needle.length) * 0.05
 }
 
 function normalizedSearchLimit(requestedLimit: number | undefined): number {
@@ -199,6 +224,81 @@ export async function searchWorkspaceFiles(
   }
 
   return { matches, truncated, filesSearched }
+}
+
+export async function searchWorkspaceFileNames(
+  rootPath: string,
+  request: WorkspaceQuickOpenRequest,
+  signal?: AbortSignal,
+): Promise<WorkspaceQuickOpenResult> {
+  const root = await realpath(rootPath)
+  const includeTextFiles = request.includeTextFiles ?? false
+  const resultLimit = normalizedSearchLimit(request.maxResults)
+  const directories = [root]
+  const matches: WorkspaceQuickOpenMatch[] = []
+  let filesScanned = 0
+  let truncated = false
+
+  while (directories.length > 0) {
+    if (signal?.aborted) return { matches: [], filesScanned, truncated, canceled: true }
+    const directoryPath = directories.pop()
+    if (!directoryPath) break
+
+    let directory
+    try {
+      directory = await opendir(directoryPath)
+    } catch {
+      continue
+    }
+
+    for await (const entry of directory) {
+      if (signal?.aborted) return { matches: [], filesScanned, truncated, canceled: true }
+      if (isIgnoredWorkspaceEntry(entry.name) || entry.isSymbolicLink()) continue
+      const entryPath = join(directoryPath, entry.name)
+      if (entry.isDirectory()) {
+        directories.push(entryPath)
+        continue
+      }
+      if (!entry.isFile() || !isSearchableFile(entryPath, includeTextFiles)) continue
+
+      filesScanned += 1
+      if (filesScanned > MAX_WORKSPACE_SEARCH_FILES) {
+        truncated = true
+        break
+      }
+      const relativePath = toWorkspaceRelativePath(root, entryPath)
+      const nameScore = fuzzyFileScore(entry.name, request.query)
+      const pathScore = fuzzyFileScore(relativePath, request.query)
+      const score =
+        nameScore === undefined
+          ? pathScore
+          : pathScore === undefined
+            ? nameScore + 30
+            : Math.max(nameScore + 30, pathScore)
+      if (score !== undefined) {
+        matches.push({
+          filePath: entryPath,
+          relativePath,
+          name: entry.name,
+          score,
+        })
+      }
+      if (filesScanned % 128 === 0) await immediate()
+    }
+    if (truncated) break
+  }
+
+  matches.sort(
+    (left, right) =>
+      right.score - left.score ||
+      left.name.localeCompare(right.name) ||
+      left.relativePath.localeCompare(right.relativePath),
+  )
+  return {
+    matches: matches.slice(0, resultLimit),
+    filesScanned: Math.min(filesScanned, MAX_WORKSPACE_SEARCH_FILES),
+    truncated: truncated || matches.length > resultLimit,
+  }
 }
 
 export function searchResultFileName(match: WorkspaceSearchMatch): string {

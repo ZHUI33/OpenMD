@@ -7,6 +7,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 
 import { MarkdownSourceEditorAdapter } from '../src/renderer/src/editor/source-editor-adapter'
 import type { SourceCursorPosition } from '../src/renderer/src/editor/editor.types'
+import type { DocumentSearchStatus } from '../src/renderer/src/editor/editor.types'
 
 class NoopResizeObserver {
   disconnect = (): void => undefined
@@ -45,6 +46,7 @@ async function createAdapter(
   options: {
     onChange?: (markdown: string) => void
     onCursorChange?: (position: SourceCursorPosition) => void
+    onSearchStatusChange?: (status: DocumentSearchStatus) => void
   } = {},
 ): Promise<{
   adapter: MarkdownSourceEditorAdapter
@@ -62,6 +64,7 @@ async function createAdapter(
     theme: 'light',
     onChange: options.onChange ?? (() => undefined),
     onCursorChange: options.onCursorChange,
+    onSearchStatusChange: options.onSearchStatusChange,
   })
   adapters.push(adapter)
   await adapter.create()
@@ -73,6 +76,37 @@ async function createAdapter(
 }
 
 describe('Markdown source editor adapter', () => {
+  it('provides unified counted find/replace with options and undo/redo', async () => {
+    const statuses: DocumentSearchStatus[] = []
+    const { adapter, view } = await createAdapter('Alpha alpha alphabet ALPHA', {
+      onSearchStatusChange: (status) => statuses.push(status),
+    })
+    adapter.setSearchQuery({
+      query: 'alpha',
+      replacement: 'Beta',
+      caseSensitive: false,
+      wholeWord: true,
+      regularExpression: false,
+    })
+    expect(statuses.at(-1)).toEqual({ current: 1, total: 3, error: undefined })
+
+    adapter.findNext()
+    adapter.replaceCurrent()
+    expect(adapter.getMarkdown()).toBe('Alpha Beta alphabet ALPHA')
+    expect(undo(view)).toBe(true)
+    expect(adapter.getMarkdown()).toBe('Alpha alpha alphabet ALPHA')
+    expect(redo(view)).toBe(true)
+    expect(adapter.getMarkdown()).toBe('Alpha Beta alphabet ALPHA')
+
+    adapter.setSearchQuery({
+      query: '(',
+      replacement: '',
+      caseSensitive: true,
+      wholeWord: false,
+      regularExpression: true,
+    })
+    expect(statuses.at(-1)?.error).toBeDefined()
+  })
   it('preserves the exact untouched Markdown string, including CRLF and trailing whitespace', async () => {
     const markdown = '# 标题\r\n\r\n正文尾随空格  \r\n'
     const { adapter } = await createAdapter(markdown)

@@ -225,3 +225,219 @@ test('focused writing workflow, formatting, and sidebar settings survive restart
     await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
   }
 })
+
+test('phase two find, quick open, tab shortcuts, focus and typewriter workflow', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'openmd-phase-two-e2e-'))
+  const workspacePath = join(root, 'PhaseTwo')
+  const documentPath = join(workspacePath, 'navigation.md')
+  const secondPath = join(workspacePath, 'second-note.md')
+  const paths: LaunchPaths = {
+    root,
+    savePath: join(root, 'untitled.md'),
+    exportDirectory: join(root, 'exports'),
+  }
+  const longParagraphs = Array.from(
+    { length: 70 },
+    (_, index) => `Paragraph ${String(index + 1).padStart(2, '0')} keeps scrolling stable.`,
+  )
+  const initialMarkdown = [
+    '# Phase Two Navigation',
+    '',
+    'Alpha alpha ALPHA [Alpha link](https://example.com/alpha).',
+    '',
+    'alphabet remains outside whole-word matching.',
+    '',
+    '## Long document',
+    '',
+    ...longParagraphs.flatMap((paragraph) => [paragraph, '']),
+  ].join('\n')
+  await mkdir(workspacePath)
+  await writeFile(documentPath, initialMarkdown, 'utf8')
+  await writeFile(secondPath, '# Second Note\n\nA short second document.', 'utf8')
+
+  let application: ElectronApplication | undefined
+  try {
+    application = await launchOpenMd(paths)
+    let page = await application.firstWindow()
+    await expect(page.getByLabel('Markdown 正文编辑器')).toBeVisible()
+    await application.evaluate(({ dialog }, selectedWorkspacePath) => {
+      Object.defineProperty(dialog, 'showOpenDialog', {
+        configurable: true,
+        value: async () => ({ canceled: false, filePaths: [selectedWorkspacePath] }),
+      })
+    }, workspacePath)
+    await page.getByRole('button', { name: /打开文件夹/u }).click()
+    await page.getByRole('button', { name: 'navigation.md', exact: true }).click()
+    await expect(page.locator('.ProseMirror h1')).toContainText('Phase Two Navigation')
+
+    await page.keyboard.press(`${shortcutModifier}+F`)
+    const findInput = page.getByRole('textbox', { name: '查找内容' })
+    await findInput.fill('alpha')
+    await page.getByRole('button', { name: '全词匹配' }).click()
+    await expect(page.locator('.document-find-bar__count')).toHaveText('1/4')
+    await page.getByRole('button', { name: '区分大小写' }).click()
+    await expect(page.locator('.document-find-bar__count')).toHaveText('1/1')
+    await page.getByRole('button', { name: '区分大小写' }).click()
+    await page.getByRole('button', { name: '正则表达式' }).click()
+    await findInput.fill('alp.a')
+    await expect(page.locator('.document-find-bar__count')).toHaveText('1/4')
+    await page.getByRole('button', { name: '正则表达式' }).click()
+    await findInput.fill('alpha')
+
+    await page.keyboard.press(`${shortcutModifier}+H`)
+    const replaceInput = page.getByRole('textbox', { name: '替换为' })
+    await replaceInput.fill('Beta')
+    await page.getByRole('button', { name: '全部替换' }).click()
+    await expect(page.locator('.ProseMirror')).toContainText('Beta Beta Beta Beta link')
+    await expect(page.locator('.ProseMirror a', { hasText: 'Beta link' })).toHaveAttribute(
+      'href',
+      'https://example.com/alpha',
+    )
+    await page.screenshot({
+      path: resolve('docs/images/typora-parity-phase2-find.png'),
+      fullPage: true,
+    })
+
+    await findInput.press('Escape')
+    await page.locator('.ProseMirror').click()
+    await page.keyboard.press(`${shortcutModifier}+Z`)
+    await expect(page.locator('.ProseMirror')).toContainText('Alpha alpha ALPHA Alpha link')
+    await page.keyboard.press(
+      process.platform === 'darwin' ? `${shortcutModifier}+Shift+Z` : `${shortcutModifier}+Y`,
+    )
+    await expect(page.locator('.ProseMirror')).toContainText('Beta Beta Beta Beta link')
+
+    await page.keyboard.press('F9')
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-typewriter-mode', 'true')
+    const lastVisualParagraph = page.locator('.ProseMirror p').last()
+    await lastVisualParagraph.click()
+    await page.keyboard.press('End')
+    await page.locator('.openmd-editor-scroll').evaluate((element) => {
+      element.scrollTop = 0
+    })
+    await page.keyboard.insertText(' Visual typewriter validation.')
+    await expect
+      .poll(() => page.locator('.openmd-editor-scroll').evaluate((element) => element.scrollTop))
+      .toBeGreaterThan(0)
+
+    await page.keyboard.press(`${shortcutModifier}+/`)
+    await expect(page.locator('.openmd-source-editor .cm-editor')).toBeVisible()
+    await page.keyboard.press(`${shortcutModifier}+F`)
+    await page.getByRole('textbox', { name: '查找内容' }).fill('Beta')
+    await expect(page.locator('.document-find-bar__count')).toHaveText('1/4')
+    await page.getByRole('textbox', { name: '查找内容' }).press('Enter')
+    await expect(page.locator('.document-find-bar__count')).toHaveText('2/4')
+    await page.getByRole('textbox', { name: '查找内容' }).press('Shift+Enter')
+    await expect(page.locator('.document-find-bar__count')).toHaveText('1/4')
+    await page.getByRole('textbox', { name: '查找内容' }).press('Escape')
+
+    const sourceContent = page.locator('.openmd-source-editor .cm-content')
+    await sourceContent.click()
+    await page.keyboard.press(`${shortcutModifier}+End`)
+    await page.locator('.openmd-source-editor .cm-scroller').evaluate((element) => {
+      element.scrollTop = 0
+    })
+    await sourceContent.dispatchEvent('compositionstart', { data: '' })
+    await page.keyboard.insertText('\n中文输入法验证')
+    await sourceContent.dispatchEvent('compositionend', { data: '中文输入法验证' })
+    await expect(sourceContent).toContainText('中文输入法验证')
+    await expect
+      .poll(() =>
+        page.locator('.openmd-source-editor .cm-scroller').evaluate((element) => element.scrollTop),
+      )
+      .toBeGreaterThan(0)
+
+    await page.keyboard.press(`${shortcutModifier}+P`)
+    const quickOpenInput = page.getByRole('combobox')
+    await quickOpenInput.fill('second')
+    await expect(page.getByRole('option', { name: /second-note\.md/u })).toBeVisible()
+    await page.screenshot({
+      path: resolve('docs/images/typora-parity-phase2-quick-open.png'),
+      fullPage: true,
+    })
+    await quickOpenInput.press('Enter')
+    await expect(page.getByRole('tab', { name: /second-note\.md/u })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+
+    await page.keyboard.press(`${shortcutModifier}+P`)
+    await page.getByRole('combobox').fill('second')
+    await expect(page.getByRole('option', { name: /second-note\.md/u })).toBeVisible()
+    await page.getByRole('combobox').press('Enter')
+    await expect(page.getByRole('tab', { name: /second-note\.md/u })).toHaveCount(1)
+
+    await page.keyboard.press(`${shortcutModifier}+W`)
+    await expect(page.getByRole('tab', { name: /second-note\.md/u })).toHaveCount(0)
+    await page.keyboard.press(`${shortcutModifier}+Shift+T`)
+    await expect(page.getByRole('tab', { name: /second-note\.md/u })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+
+    await page.getByRole('tab', { name: /navigation\.md/u }).click()
+    await expect(page.locator('.openmd-source-editor .cm-editor')).toBeVisible()
+    await page.locator('.openmd-source-editor .cm-scroller').evaluate((element) => {
+      element.scrollTop = 520
+    })
+    await page.keyboard.press('Control+Tab')
+    await expect(page.getByRole('tab', { name: /second-note\.md/u })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await page.keyboard.press('Control+Shift+Tab')
+    await expect(page.getByRole('tab', { name: /navigation\.md/u })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await expect
+      .poll(() =>
+        page.locator('.openmd-source-editor .cm-scroller').evaluate((element) => element.scrollTop),
+      )
+      .toBeGreaterThan(450)
+
+    await page.keyboard.press('F8')
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-focus-mode', 'true')
+    await sourceContent.click()
+    const dimmedLine = page.locator('.openmd-source-editor .cm-line:not(.cm-activeLine)').first()
+    await expect(dimmedLine).toHaveCSS('opacity', '0.32')
+    await expect(page.locator('.openmd-source-editor .cm-activeLine').first()).toHaveCSS(
+      'opacity',
+      '1',
+    )
+    await page.keyboard.press(`${shortcutModifier}+F`)
+    await expect(dimmedLine).toHaveCSS('opacity', '1')
+    await page.getByRole('textbox', { name: '查找内容' }).press('Escape')
+
+    await page.keyboard.press(`${shortcutModifier}+,`)
+    const settingsDialog = page.getByRole('dialog', { name: '设置' })
+    await expect(settingsDialog).toBeVisible()
+    await page.getByRole('combobox', { name: '打字机模式行为' }).selectOption('always')
+    await page.getByRole('button', { name: '保存', exact: true }).click()
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.openmd.settings.get().then((value) => value.typewriterBehavior)),
+      )
+      .toBe('always')
+
+    await runMenuCommand(application, 'openmd-document-save')
+    await expect.poll(async () => readFile(documentPath, 'utf8')).toContain('中文输入法验证')
+    const savedMarkdown = await readFile(documentPath, 'utf8')
+    expect(savedMarkdown.match(/Beta/gu)).toHaveLength(4)
+    expect(savedMarkdown).toContain('[Beta link](https://example.com/alpha)')
+
+    await stopOpenMd(application)
+    application = await launchOpenMd(paths)
+    page = await application.firstWindow()
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-focus-mode', 'true')
+    await expect(page.locator('.app-shell')).toHaveAttribute('data-typewriter-mode', 'true')
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.openmd.settings.get().then((value) => value.typewriterBehavior)),
+      )
+      .toBe('always')
+  } finally {
+    if (application) await stopOpenMd(application)
+    await rm(root, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 })
+  }
+})

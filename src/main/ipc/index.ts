@@ -6,6 +6,7 @@ import type { IpcMainInvokeEvent } from 'electron'
 
 import type {
   AppInfo,
+  AppCommandState,
   ConfirmCloseRequest,
   ExportHtmlRequest,
   ExportPdfRequest,
@@ -21,6 +22,7 @@ import type {
   RenameWorkspaceEntryRequest,
   ReleaseDocumentRequest,
   WorkspacePathRequest,
+  WorkspaceQuickOpenRequest,
   WorkspaceSearchRequest,
 } from '../../shared/desktop-api.types'
 import { IPC_CHANNELS } from '../../shared/ipc-channels'
@@ -28,6 +30,7 @@ import type { DocumentService } from '../document-service'
 import type { ExportService } from '../export-service'
 import type { ImageService } from '../image-service'
 import type { WorkspaceService } from '../workspace-service'
+import { updateApplicationMenuCommandState } from '../menu'
 import { markRendererReady, reloadMainWindow, resolveCloseRequest } from '../window'
 
 function isTrustedRendererUrl(frameUrl: string): boolean {
@@ -62,6 +65,17 @@ export function getTrustedSenderWindow(event: IpcMainInvokeEvent): BrowserWindow
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null
+}
+
+function parseAppCommandState(value: unknown): AppCommandState {
+  if (
+    !isRecord(value) ||
+    typeof value.focusMode !== 'boolean' ||
+    typeof value.typewriterMode !== 'boolean'
+  ) {
+    throw new TypeError('Invalid application command state.')
+  }
+  return { focusMode: value.focusMode, typewriterMode: value.typewriterMode }
 }
 
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['http:', 'https:', 'mailto:'])
@@ -312,6 +326,26 @@ function parseWorkspaceSearchRequest(value: unknown): WorkspaceSearchRequest {
   }
 }
 
+function parseWorkspaceQuickOpenRequest(value: unknown): WorkspaceQuickOpenRequest {
+  if (
+    !isRecord(value) ||
+    typeof value.query !== 'string' ||
+    value.query.length > 1_000 ||
+    (value.includeTextFiles !== undefined && typeof value.includeTextFiles !== 'boolean') ||
+    (value.maxResults !== undefined &&
+      (typeof value.maxResults !== 'number' ||
+        !Number.isInteger(value.maxResults) ||
+        value.maxResults <= 0))
+  ) {
+    throw new TypeError('Invalid workspace quick open request.')
+  }
+  return {
+    query: value.query,
+    includeTextFiles: value.includeTextFiles as boolean | undefined,
+    maxResults: value.maxResults as number | undefined,
+  }
+}
+
 export function registerIpcHandlers(
   documentService: DocumentService,
   imageService: ImageService,
@@ -334,6 +368,12 @@ export function registerIpcHandlers(
     getTrustedSenderWindow(event)
     const request = parseOpenExternalUrlRequest(value)
     await shell.openExternal(request.url)
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.appUpdateCommandState)
+  ipcMain.handle(IPC_CHANNELS.appUpdateCommandState, (event, value: unknown) => {
+    getTrustedSenderWindow(event)
+    updateApplicationMenuCommandState(parseAppCommandState(value))
   })
 
   ipcMain.removeHandler(IPC_CHANNELS.documentsNew)
@@ -383,6 +423,12 @@ export function registerIpcHandlers(
   ipcMain.handle(IPC_CHANNELS.documentsReload, (event) => {
     const senderWindow = getTrustedSenderWindow(event)
     reloadMainWindow(senderWindow, documentService.getCurrentPath(senderWindow))
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.documentsRecent)
+  ipcMain.handle(IPC_CHANNELS.documentsRecent, (event) => {
+    getTrustedSenderWindow(event)
+    return documentService.getRecentFiles()
   })
 
   ipcMain.removeHandler(IPC_CHANNELS.imagesSave)
@@ -500,5 +546,18 @@ export function registerIpcHandlers(
       getTrustedSenderWindow(event),
       parseWorkspaceSearchRequest(value),
     )
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceQuickOpen)
+  ipcMain.handle(IPC_CHANNELS.workspaceQuickOpen, (event, value: unknown) => {
+    return workspaceService.quickOpen(
+      getTrustedSenderWindow(event),
+      parseWorkspaceQuickOpenRequest(value),
+    )
+  })
+
+  ipcMain.removeHandler(IPC_CHANNELS.workspaceQuickOpenCancel)
+  ipcMain.handle(IPC_CHANNELS.workspaceQuickOpenCancel, (event) => {
+    workspaceService.cancelQuickOpen(getTrustedSenderWindow(event))
   })
 }

@@ -14,6 +14,8 @@ import type {
   WorkspaceFileResult,
   WorkspaceInfo,
   WorkspacePathRequest,
+  WorkspaceQuickOpenRequest,
+  WorkspaceQuickOpenResult,
   WorkspaceSearchRequest,
   WorkspaceSearchResult,
 } from '../shared/desktop-api.types'
@@ -30,7 +32,7 @@ import {
   toWorkspaceRelativePath,
   WorkspacePathError,
 } from './workspace-paths'
-import { searchWorkspaceFiles } from './workspace-search'
+import { searchWorkspaceFileNames, searchWorkspaceFiles } from './workspace-search'
 
 interface WorkspaceState extends WorkspaceInfo {
   rootPath: string
@@ -63,6 +65,7 @@ export async function moveWorkspaceEntryToTrash(
 export class WorkspaceService {
   private readonly workspaces = new Map<number, WorkspaceState>()
   private readonly activeSearches = new Map<number, AbortController>()
+  private readonly activeQuickOpens = new Map<number, AbortController>()
   private readonly attachedWindows = new Set<number>()
   private readonly trashItem: (filePath: string) => Promise<void>
 
@@ -169,6 +172,31 @@ export class WorkspaceService {
     }
   }
 
+  async quickOpen(
+    parentWindow: BrowserWindow,
+    request: WorkspaceQuickOpenRequest,
+  ): Promise<WorkspaceQuickOpenResult> {
+    const windowId = parentWindow.webContents.id
+    this.abortQuickOpen(windowId)
+    const controller = new AbortController()
+    this.activeQuickOpens.set(windowId, controller)
+    try {
+      return await searchWorkspaceFileNames(
+        this.getRequiredRoot(parentWindow),
+        request,
+        controller.signal,
+      )
+    } finally {
+      if (this.activeQuickOpens.get(windowId) === controller) {
+        this.activeQuickOpens.delete(windowId)
+      }
+    }
+  }
+
+  cancelQuickOpen(parentWindow: BrowserWindow): void {
+    this.abortQuickOpen(parentWindow.webContents.id)
+  }
+
   async isDocumentPathAllowed(parentWindow: BrowserWindow, filePath: string): Promise<boolean> {
     const workspace = this.workspaces.get(parentWindow.webContents.id)
     if (!workspace || !DOCUMENT_EXTENSIONS.has(extname(filePath).toLocaleLowerCase('en-US'))) {
@@ -200,6 +228,7 @@ export class WorkspaceService {
   releaseWindow(parentWindow: BrowserWindow): void {
     const windowId = parentWindow.webContents.id
     this.abortSearch(windowId)
+    this.abortQuickOpen(windowId)
     this.workspaces.delete(windowId)
     this.attachedWindows.delete(windowId)
   }
@@ -213,6 +242,11 @@ export class WorkspaceService {
   private abortSearch(windowId: number): void {
     this.activeSearches.get(windowId)?.abort()
     this.activeSearches.delete(windowId)
+  }
+
+  private abortQuickOpen(windowId: number): void {
+    this.activeQuickOpens.get(windowId)?.abort()
+    this.activeQuickOpens.delete(windowId)
   }
 
   private attachWindowCleanup(parentWindow: BrowserWindow): void {

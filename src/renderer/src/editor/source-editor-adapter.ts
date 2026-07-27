@@ -15,7 +15,14 @@ import {
   syntaxHighlighting,
 } from '@codemirror/language'
 import { languages } from '@codemirror/language-data'
-import { search, searchKeymap } from '@codemirror/search'
+import {
+  replaceAll as replaceAllSearchMatches,
+  replaceNext,
+  SearchQuery,
+  search,
+  searchKeymap,
+  setSearchQuery,
+} from '@codemirror/search'
 import { Compartment, EditorState, StateEffect, StateField } from '@codemirror/state'
 import type { ChangeSet, Extension, StateEffectType, Text } from '@codemirror/state'
 import { oneDark } from '@codemirror/theme-one-dark'
@@ -34,10 +41,14 @@ import {
 import { createSourceCursorAnchor, resolveSourceCursorOffset } from './cursor-anchor'
 import type {
   CursorAnchor,
+  DocumentSearchQuery,
+  DocumentSearchStatus,
   EditorDocumentAdapter,
   ResolvedTheme,
   SourceCursorPosition,
 } from './editor.types'
+import { RafCaretCenterer } from './writing-modes-feature'
+import type { TypewriterBehavior } from '../../../shared/settings'
 
 export interface MarkdownSourceEditorAdapterOptions {
   root: HTMLElement
@@ -48,6 +59,10 @@ export interface MarkdownSourceEditorAdapterOptions {
   theme: ResolvedTheme
   onChange: (markdown: string) => void
   onCursorChange?: (position: SourceCursorPosition) => void
+  onSearchStatusChange?: (status: DocumentSearchStatus) => void
+  focusMode?: boolean
+  typewriterMode?: boolean
+  typewriterBehavior?: TypewriterBehavior
 }
 
 function detectLineSeparator(markdownText: string): string {
@@ -258,6 +273,13 @@ export class MarkdownSourceEditorAdapter implements EditorDocumentAdapter {
   private lineSeparator: string
   private readonly restoreLineEndingsEffect: StateEffectType<LineEndingSnapshot>
   private readonly lineEndingsField: StateField<LineEndingSnapshot>
+  private searchQuery = new SearchQuery({ search: '' })
+  private lastSearchStatus: DocumentSearchStatus = { current: 0, total: 0 }
+  private typewriterMode: boolean
+  private typewriterBehavior: TypewriterBehavior
+  private inputIntent = false
+  private keyboardIntent = false
+  private centerer?: RafCaretCenterer
 
   constructor(private readonly options: MarkdownSourceEditorAdapterOptions) {
     this.markdown = options.initialMarkdown
@@ -266,6 +288,8 @@ export class MarkdownSourceEditorAdapter implements EditorDocumentAdapter {
     this.readOnly = options.readOnly
     this.theme = options.theme
     this.lineSeparator = detectLineSeparator(options.initialMarkdown)
+    this.typewriterMode = options.typewriterMode ?? false
+    this.typewriterBehavior = options.typewriterBehavior ?? 'input'
     this.restoreLineEndingsEffect = StateEffect.define<LineEndingSnapshot>({
       // When typing transactions are grouped into one history event, only the
       // oldest inverse snapshot is needed to restore the beginning of the group.
@@ -300,7 +324,17 @@ export class MarkdownSourceEditorAdapter implements EditorDocumentAdapter {
       state: this.createEditorState(this.markdown),
     })
     this.markdownDocument = this.view.state.doc
+    this.view.dom.addEventListener('beforeinput', this.onBeforeInput, true)
+    this.view.dom.addEventListener('input', this.onTypewriterInput, true)
+    this.view.dom.addEventListener('keydown', this.onTypewriterKeyDown, true)
+    this.view.dom.addEventListener('pointerdown', this.onPointerDown, true)
+    const ownerWindow = this.view.dom.ownerDocument.defaultView ?? window
+    this.centerer = new RafCaretCenterer(ownerWindow, this.view.dom, () => {
+      if (!this.view) return undefined
+      return this.view.coordsAtPos(this.view.state.selection.main.head)?.top
+    })
     this.emitCursorPosition(this.view.state)
+    this.publishSearchStatus()
   }
 
   getMarkdown(): string {
@@ -352,6 +386,70 @@ export class MarkdownSourceEditorAdapter implements EditorDocumentAdapter {
     this.view.dispatch({ selection: { anchor: offset }, scrollIntoView: true })
   }
 
+  setSearchQuery(query: DocumentSearchQuery): void {
+    if (!this.view || this.destroyed) return
+    this.searchQuery = new SearchQuery({
+      search: query.query,
+      caseSensitive: query.caseSensitive,
+      regexp: query.regularExpression,
+      wholeWord: query.wholeWord,
+      replace: query.replacement,
+      literal: !query.regularExpression,
+    })
+    this.view.dispatch({ effects: setSearchQuery.of(this.searchQuery) })
+    this.publishSearchStatus()
+  }
+
+  findNext(direction: 1 | -1 = 1): void {
+    if (!this.view || this.destroyed) return
+    const matches = this.getSearchMatches()
+    if (matches.length === 0) return
+    const selection = this.view.state.selection.main
+    let currentIndex = matches.findIndex(
+      (match) => match.from === selection.from && match.to === selection.to,
+    )
+    if (currentIndex < 0) {
+      currentIndex = matches.findIndex((match) => match.from >= selection.from)
+      if (currentIndex < 0) currentIndex = 0
+    }
+    const targetIndex = (currentIndex + direction + matches.length) % matches.length
+    const target = matches[targetIndex]!
+    this.view.dispatch({
+      selection: { anchor: target.from, head: target.to },
+      effects: EditorView.scrollIntoView(target.from, { y: 'center' }),
+    })
+    this.publishSearchStatus()
+  }
+
+  replaceCurrent(): void {
+    if (!this.view || this.destroyed) return
+    replaceNext(this.view)
+    this.publishSearchStatus()
+  }
+
+  replaceAll(): void {
+    if (!this.view || this.destroyed) return
+    replaceAllSearchMatches(this.view)
+    this.publishSearchStatus()
+  }
+
+  clearSearch(): void {
+    if (!this.view || this.destroyed) return
+    this.searchQuery = new SearchQuery({ search: '' })
+    this.view.dispatch({ effects: setSearchQuery.of(this.searchQuery) })
+    this.publishSearchStatus()
+  }
+
+  setWritingModes(
+    focusMode: boolean,
+    typewriterMode: boolean,
+    typewriterBehavior: TypewriterBehavior,
+  ): void {
+    void focusMode
+    this.typewriterMode = typewriterMode
+    this.typewriterBehavior = typewriterBehavior
+  }
+
   setReadOnly(readOnly: boolean): void {
     this.readOnly = readOnly
     this.view?.dispatch({
@@ -386,6 +484,12 @@ export class MarkdownSourceEditorAdapter implements EditorDocumentAdapter {
     if (this.destroyed) return
     this.getMarkdown()
     this.destroyed = true
+    this.view?.dom.removeEventListener('beforeinput', this.onBeforeInput, true)
+    this.view?.dom.removeEventListener('input', this.onTypewriterInput, true)
+    this.view?.dom.removeEventListener('keydown', this.onTypewriterKeyDown, true)
+    this.view?.dom.removeEventListener('pointerdown', this.onPointerDown, true)
+    this.centerer?.cancel()
+    this.centerer = undefined
     this.view?.destroy()
     this.view = undefined
   }
@@ -395,6 +499,66 @@ export class MarkdownSourceEditorAdapter implements EditorDocumentAdapter {
     const line = state.doc.lineAt(offset)
     const column = Array.from(state.sliceDoc(line.from, offset)).length + 1
     this.options.onCursorChange?.({ line: line.number, column })
+  }
+
+  private publishSearchStatus(): void {
+    const view = this.view
+    const matches = this.getSearchMatches()
+    const selection = view?.state.selection.main
+    let currentIndex = selection
+      ? matches.findIndex((match) => match.from === selection.from && match.to === selection.to)
+      : -1
+    if (currentIndex < 0 && selection && matches.length > 0) {
+      currentIndex = matches.findIndex((match) => match.from >= selection.from)
+      if (currentIndex < 0) currentIndex = 0
+    }
+    const status: DocumentSearchStatus = {
+      current: currentIndex >= 0 ? currentIndex + 1 : 0,
+      total: matches.length,
+      error: this.searchQuery.valid ? undefined : '正则表达式无效。',
+    }
+    if (
+      status.current === this.lastSearchStatus.current &&
+      status.total === this.lastSearchStatus.total &&
+      status.error === this.lastSearchStatus.error
+    ) {
+      return
+    }
+    this.lastSearchStatus = status
+    this.options.onSearchStatusChange?.(status)
+  }
+
+  private getSearchMatches(): Array<{ from: number; to: number }> {
+    const matches: Array<{ from: number; to: number }> = []
+    if (!this.view || !this.searchQuery.valid) return matches
+    const cursor = this.searchQuery.getCursor(this.view.state)
+    for (let next = cursor.next(); !next.done; next = cursor.next()) matches.push(next.value)
+    return matches
+  }
+
+  private readonly onBeforeInput = (): void => {
+    this.inputIntent = true
+  }
+
+  private readonly onTypewriterInput = (): void => {
+    if (this.typewriterMode) this.centerer?.schedule()
+  }
+
+  private readonly onTypewriterKeyDown = (event: KeyboardEvent): void => {
+    if (
+      event.key.startsWith('Arrow') ||
+      event.key === 'Home' ||
+      event.key === 'End' ||
+      event.key === 'PageUp' ||
+      event.key === 'PageDown'
+    ) {
+      this.keyboardIntent = true
+    }
+  }
+
+  private readonly onPointerDown = (): void => {
+    this.inputIntent = false
+    this.keyboardIntent = false
   }
 
   private createEditorState(markdownText: string): EditorState {
@@ -444,6 +608,14 @@ export class MarkdownSourceEditorAdapter implements EditorDocumentAdapter {
             this.options.onChange(this.markdown)
           }
           if (update.docChanged || update.selectionSet) this.emitCursorPosition(update.state)
+          const shouldCenter =
+            this.typewriterMode &&
+            ((update.docChanged && (this.inputIntent || update.view.hasFocus)) ||
+              (this.typewriterBehavior === 'always' && update.selectionSet && this.keyboardIntent))
+          this.inputIntent = false
+          this.keyboardIntent = false
+          if (shouldCenter) this.centerer?.schedule()
+          if (update.docChanged || update.selectionSet) this.publishSearchStatus()
         }),
       ],
     })

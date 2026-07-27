@@ -1,4 +1,4 @@
-export const SETTINGS_SCHEMA_VERSION = 4
+export const SETTINGS_SCHEMA_VERSION = 5
 
 export const BUILT_IN_THEMES = ['system', 'light', 'dark'] as const
 export const EDITOR_MODES = ['visual', 'source'] as const
@@ -9,6 +9,7 @@ export const IMAGE_ASSET_DIRECTORY_RULES = [
   'workspace-assets',
   'custom',
 ] as const
+export const TYPEWRITER_BEHAVIORS = ['always', 'input'] as const
 
 export type BuiltInTheme = (typeof BUILT_IN_THEMES)[number]
 export type UserThemeId = `user:${string}`
@@ -16,6 +17,7 @@ export type ThemeSelection = BuiltInTheme | UserThemeId
 export type DefaultEditorMode = (typeof EDITOR_MODES)[number]
 export type SidebarPanel = (typeof SIDEBAR_PANELS)[number]
 export type ImageAssetDirectoryRule = (typeof IMAGE_ASSET_DIRECTORY_RULES)[number]
+export type TypewriterBehavior = (typeof TYPEWRITER_BEHAVIORS)[number]
 
 export interface AutoSaveSettings {
   enabled: boolean
@@ -41,6 +43,9 @@ export interface AppSettings {
   sidebarVisible: boolean
   sidebarWidthPx: number
   sidebarPanel: SidebarPanel
+  focusMode: boolean
+  typewriterMode: boolean
+  typewriterBehavior: TypewriterBehavior
 }
 
 export type AppSettingsUpdate = Partial<Omit<AppSettings, 'schemaVersion'>>
@@ -73,6 +78,9 @@ export const DEFAULT_SETTINGS: Readonly<AppSettings> = Object.freeze({
   sidebarVisible: false,
   sidebarWidthPx: 280,
   sidebarPanel: 'files',
+  focusMode: false,
+  typewriterMode: false,
+  typewriterBehavior: 'input',
 })
 
 const SETTINGS_KEYS = new Set<string>([
@@ -93,6 +101,9 @@ const SETTINGS_KEYS = new Set<string>([
   'sidebarVisible',
   'sidebarWidthPx',
   'sidebarPanel',
+  'focusMode',
+  'typewriterMode',
+  'typewriterBehavior',
 ])
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -246,6 +257,15 @@ export function migrateSettings(value: unknown): AppSettings {
     sidebarPanel: isOneOf(source.sidebarPanel, SIDEBAR_PANELS)
       ? source.sidebarPanel
       : DEFAULT_SETTINGS.sidebarPanel,
+    focusMode:
+      typeof source.focusMode === 'boolean' ? source.focusMode : DEFAULT_SETTINGS.focusMode,
+    typewriterMode:
+      typeof source.typewriterMode === 'boolean'
+        ? source.typewriterMode
+        : DEFAULT_SETTINGS.typewriterMode,
+    typewriterBehavior: isOneOf(source.typewriterBehavior, TYPEWRITER_BEHAVIORS)
+      ? source.typewriterBehavior
+      : DEFAULT_SETTINGS.typewriterBehavior,
   }
 }
 
@@ -290,6 +310,8 @@ export function parseSettingsUpdate(value: unknown): AppSettingsUpdate {
     'sourceLineWrapping',
     'showTextFiles',
     'sidebarVisible',
+    'focusMode',
+    'typewriterMode',
   ] as const) {
     if (field in value) {
       if (typeof value[field] !== 'boolean') throw new TypeError(`${field} must be a boolean.`)
@@ -333,6 +355,12 @@ export function parseSettingsUpdate(value: unknown): AppSettingsUpdate {
       throw new TypeError('Invalid sidebar panel.')
     }
     update.sidebarPanel = value.sidebarPanel
+  }
+  if ('typewriterBehavior' in value) {
+    if (!isOneOf(value.typewriterBehavior, TYPEWRITER_BEHAVIORS)) {
+      throw new TypeError('Invalid typewriter behavior.')
+    }
+    update.typewriterBehavior = value.typewriterBehavior
   }
   if ('editorFontFamily' in value) {
     const fontFamily = safeFontFamily(value.editorFontFamily, '')

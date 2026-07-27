@@ -35,6 +35,9 @@ function asSettingsUpdate(settings: AppSettings): AppSettingsUpdate {
     imageAssetDirectoryRule: settings.imageAssetDirectoryRule,
     customImageAssetDirectory: settings.customImageAssetDirectory,
     showTextFiles: settings.showTextFiles,
+    focusMode: settings.focusMode,
+    typewriterMode: settings.typewriterMode,
+    typewriterBehavior: settings.typewriterBehavior,
   }
 }
 
@@ -322,6 +325,42 @@ export function SettingsDialog({
                       <span>源码模式自动换行</span>
                     </label>
                   </div>
+                  <div className="settings-toggle-row">
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={draft.focusMode}
+                        onChange={(event) => updateDraft('focusMode', event.currentTarget.checked)}
+                      />
+                      <span>专注模式（F8）</span>
+                    </label>
+                    <label className="settings-toggle">
+                      <input
+                        type="checkbox"
+                        checked={draft.typewriterMode}
+                        onChange={(event) =>
+                          updateDraft('typewriterMode', event.currentTarget.checked)
+                        }
+                      />
+                      <span>打字机模式（F9）</span>
+                    </label>
+                  </div>
+                  <label className="settings-field">
+                    <span>打字机模式行为</span>
+                    <select
+                      disabled={!draft.typewriterMode}
+                      value={draft.typewriterBehavior}
+                      onChange={(event) =>
+                        updateDraft(
+                          'typewriterBehavior',
+                          event.currentTarget.value === 'always' ? 'always' : 'input',
+                        )
+                      }
+                    >
+                      <option value="input">仅输入时居中</option>
+                      <option value="always">始终居中</option>
+                    </select>
+                  </label>
                 </fieldset>
 
                 <fieldset>
