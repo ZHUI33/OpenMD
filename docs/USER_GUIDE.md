@@ -71,6 +71,10 @@ OpenMD 默认使用所见即所得模式。Markdown 标记会转换为标题、�
 
 可以在“设置 → 默认编辑模式”中修改新打开文档使用的模式。OpenMD 不使用左右分栏预览。
 
+只切换模式不会修改文档，也不会让标签出现“未保存”圆点。OpenMD 会保留未触碰范围中的
+YAML、代码围栏、HTML、空白和原有换行。只有实际编辑到的局部语法可能采用标准 Markdown
+写法；完整边界见 [Markdown 兼容性与源码保真](MARKDOWN_COMPATIBILITY.md)。
+
 ## 当前文档查找与替换
 
 - 查找：`Ctrl/Cmd + F`
@@ -119,6 +123,61 @@ OpenMD 默认使用所见即所得模式。Markdown 标记会转换为标题、�
 const editor = 'OpenMD'
 ```
 ````
+
+### YAML Front Matter
+
+文件开头的 YAML Front Matter 会显示为独立源码编辑区，可以安全修改键值：
+
+```yaml
+---
+title: '中文标题'
+draft: false
+---
+```
+
+OpenMD 不执行 YAML，也不会因为进入所见即所得模式而排序键或替换引号。
+
+### 脚注、引用式链接与自动链接
+
+```markdown
+正文中的脚注[^note] 和 [项目主页][openmd]。
+
+<https://example.com>、<team@example.com>
+
+[^note]: 脚注内容。
+
+[openmd]: https://example.com '可选标题'
+```
+
+脚注引用支持点击跳转、键盘 Enter/空格跳转和悬浮预览。引用式链接保留完整、折叠和快捷
+写法；可在文末定义区修改 URL 和标题。裸 URL 遇到中文句号时，句号仍属于正文，不会成为
+链接地址的一部分。
+
+### GFM Alerts
+
+```markdown
+> [!WARNING]
+> 保存前请检查链接。
+```
+
+支持 `NOTE`、`TIP`、`IMPORTANT`、`WARNING` 和 `CAUTION`。
+
+### 表格编辑
+
+在表格中使用 `Tab` / `Shift+Tab` 切换单元格；位于最后一个单元格时按 `Tab` 会新增一行。
+右键单元格可以插入/删除行列和设置整列的左、中、右对齐。
+
+拖动选择矩形区域后复制，会得到可粘贴到表格软件的 TSV 文本。从 Excel 或其他表格复制的
+矩形数据也可以粘贴回 OpenMD；超出已有行列的内容会被裁剪，需要更多空间时请先插入行列。
+
+### 原始 HTML 与暂不支持的语法
+
+HTML 块在所见即所得模式中以可编辑源码块显示，不会作为活动页面执行。`<script>`、
+`onclick` 等事件处理器和 `javascript:` 等危险 URL 不会运行。
+
+尚未支持的扩展容器（例如 `:::custom … :::`）会显示为“暂不支持的 Markdown”源码块。
+它们可以原样修改，切换模式不会删除或错误序列化。其他陌生语法如果需要逐字符控制，使用
+源码模式最稳妥。
 
 ## 插入图片
 

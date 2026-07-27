@@ -20,11 +20,16 @@ import {
 } from '@milkdown/kit/preset/gfm'
 import { Schema } from '@milkdown/kit/prose/model'
 import { EditorState, TextSelection } from '@milkdown/kit/prose/state'
-import { addRowAfter, selectedRect, tableNodes } from '@milkdown/kit/prose/tables'
+import { addRowAfter, CellSelection, selectedRect, tableNodes } from '@milkdown/kit/prose/tables'
 import { $node } from '@milkdown/kit/utils'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 
 import { normalizeTableSize } from '../src/renderer/src/editor/table-feature'
+import {
+  parseTsvRectangle,
+  pasteTableRectangle,
+  serializeSelectedTableRectangle,
+} from '../src/renderer/src/editor/table-clipboard-plugin'
 import { moveToAdjacentTableCell } from '../src/renderer/src/editor/table-navigation-plugin'
 
 const timerEventTarget = new EventTarget()
@@ -182,6 +187,44 @@ function createNavigationState(): EditorState {
   })
 }
 
+function createClipboardState(): EditorState {
+  const schema = new Schema({
+    nodes: {
+      doc: { content: 'block+' },
+      paragraph: { content: 'text*' },
+      text: {},
+      ...tableNodes({ tableGroup: 'block', cellContent: 'paragraph', cellAttributes: {} }),
+    },
+  })
+  const paragraph = (text: string) =>
+    schema.nodes.paragraph.create(null, text ? schema.text(text) : undefined)
+  const header = schema.nodes.table_header
+  const cell = schema.nodes.table_cell
+  const row = schema.nodes.table_row
+  const table = schema.nodes.table
+  const document = schema.nodes.doc.create(null, [
+    table.create(null, [
+      row.create(null, [
+        header.create(null, paragraph('H1')),
+        header.create(null, paragraph('H2')),
+      ]),
+      row.create(null, [cell.create(null, paragraph('A1')), cell.create(null, paragraph('A2'))]),
+      row.create(null, [cell.create(null, paragraph('B1')), cell.create(null, paragraph('B2'))]),
+    ]),
+  ])
+  const cells: number[] = []
+  document.descendants((node, position) => {
+    if (node.type.spec.tableRole === 'cell' || node.type.spec.tableRole === 'header_cell') {
+      cells.push(position)
+    }
+  })
+  return EditorState.create({
+    schema,
+    doc: document,
+    selection: CellSelection.create(document, cells[2]!, cells[5]!),
+  })
+}
+
 describe('GFM table feature', () => {
   it('serializes table content and column alignment as Markdown, not HTML', async () => {
     const markdown = [
@@ -219,5 +262,30 @@ describe('GFM table feature', () => {
 
   it('clamps inserted tables to a valid GFM header and data shape', () => {
     expect(normalizeTableSize({ rows: 1, columns: 0 })).toEqual({ rows: 2, columns: 1 })
+  })
+
+  it('copies and pastes plain-text rectangular cell regions', () => {
+    let state = createClipboardState()
+    expect(serializeSelectedTableRectangle(state)).toBe('A1\tA2\nB1\tB2')
+    expect(parseTsvRectangle('甲\t乙\r\n丙\t丁\r\n')).toEqual([
+      ['甲', '乙'],
+      ['丙', '丁'],
+    ])
+
+    const view = {
+      get state(): EditorState {
+        return state
+      },
+      dispatch(transaction: ReturnType<EditorState['tr']['scrollIntoView']>): void {
+        state = state.apply(transaction)
+      },
+    }
+    expect(pasteTableRectangle(view, '甲\t乙\n丙\t丁')).toBe(true)
+
+    const values: string[] = []
+    state.doc.descendants((node) => {
+      if (node.type.spec.tableRole === 'cell') values.push(node.textContent)
+    })
+    expect(values).toEqual(['甲', '乙', '丙', '丁'])
   })
 })

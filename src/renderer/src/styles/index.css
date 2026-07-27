@@ -740,22 +740,206 @@ select {
   border: 1px solid var(--border);
 }
 
-.openmd-editor .milkdown-list-item-block .label-wrapper {
-  cursor: pointer;
+.openmd-frontmatter,
+.openmd-raw-markdown {
+  margin: 18px 0;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  background: var(--surface-subtle);
 }
 
-.openmd-editor .milkdown-list-item-block .label.checked,
-.openmd-editor .milkdown-list-item-block .label.unchecked {
+.openmd-frontmatter:focus-within,
+.openmd-raw-markdown:focus-within {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px var(--primary-soft);
+}
+
+.openmd-frontmatter__label,
+.openmd-raw-markdown__label {
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.openmd-frontmatter__source,
+.openmd-raw-markdown__source {
+  display: block;
+  width: 100%;
+  min-height: 92px;
+  padding: 10px 12px;
+  resize: vertical;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--foreground);
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 2;
+}
+
+.openmd-frontmatter__fallback,
+.openmd-raw-markdown__fallback {
+  margin: 0;
+  padding: 10px 12px;
+  white-space: pre-wrap;
+}
+
+.openmd-alert {
+  --openmd-alert-color: var(--primary);
+  margin: 18px 0;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--openmd-alert-color) 38%, var(--border));
+  border-left: 4px solid var(--openmd-alert-color);
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--openmd-alert-color) 8%, var(--surface));
+}
+
+.openmd-alert--tip {
+  --openmd-alert-color: #1f9d68;
+}
+
+.openmd-alert--important {
+  --openmd-alert-color: #7957d5;
+}
+
+.openmd-alert--warning {
+  --openmd-alert-color: #c78016;
+}
+
+.openmd-alert--caution {
+  --openmd-alert-color: var(--danger);
+}
+
+.openmd-alert__title {
+  margin-bottom: 4px;
+  color: var(--openmd-alert-color);
+  font-size: 12px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+}
+
+.openmd-alert__content > :first-child {
+  margin-top: 0;
+}
+
+.openmd-alert__content > :last-child {
+  margin-bottom: 0;
+}
+
+.openmd-reference-definition {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--border-strong);
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.openmd-reference-definition code,
+.openmd-image-reference {
+  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', monospace;
+}
+
+.openmd-reference-definition {
+  display: grid;
+  grid-template-columns: max-content minmax(180px, 1fr) minmax(120px, 0.55fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.openmd-reference-definition input {
+  min-width: 0;
+  padding: 4px 7px;
+  border: 1px solid transparent;
+  border-radius: 5px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+}
+
+.openmd-reference-definition input:hover {
+  border-color: var(--border);
+}
+
+.openmd-reference-definition input:focus {
+  border-color: var(--primary);
+  outline: 2px solid var(--primary-soft);
+  background: var(--surface);
+}
+
+.openmd-footnote-reference {
+  padding: 0 2px;
+  border-radius: 3px;
   color: var(--primary);
+  cursor: pointer;
+  font-weight: 700;
+}
+
+.openmd-footnote-reference:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.openmd-editor dl[data-type='footnote_definition'] {
+  scroll-margin-block: 120px;
+}
+
+.openmd-footnote-preview {
+  position: fixed;
+  z-index: 1500;
+  width: min(320px, calc(100vw - 24px));
+  padding: 9px 11px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface-elevated);
+  box-shadow: var(--shadow-menu);
+  color: var(--foreground);
+  font-size: 13px;
+  line-height: 1.55;
+  pointer-events: none;
 }
 
 .openmd-editor .ProseMirror hr {
   margin: 12px 0;
 }
 
-.openmd-editor .ProseMirror .milkdown-list-item-block > .list-item > .children > p {
+.openmd-editor .openmd-list-item > .openmd-list-item__content > p {
   min-height: 32px;
   padding: 4px 0;
+}
+
+.openmd-editor .openmd-list-item[data-item-type='task'] {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: start;
+  list-style: none;
+}
+
+.openmd-task-checkbox {
+  width: 15px;
+  height: 15px;
+  margin: 12px 0 0;
+  accent-color: var(--primary);
+  cursor: pointer;
+}
+
+.openmd-task-checkbox:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+.openmd-list-item__content > :first-child {
+  margin-top: 0;
+}
+
+.openmd-list-item__content > :last-child {
+  margin-bottom: 0;
 }
 
 .openmd-image-node {
@@ -1029,16 +1213,6 @@ select {
 .openmd-editor .ProseMirror pre.openmd-block-markdown-source {
   outline: 1px solid color-mix(in srgb, var(--primary) 45%, transparent);
   background: var(--surface-subtle);
-}
-
-.openmd-active-bullet_list .label-wrapper,
-.openmd-active-ordered_list .label-wrapper {
-  display: none !important;
-}
-
-.openmd-active-bullet_list li,
-.openmd-active-ordered_list li {
-  gap: 0 !important;
 }
 
 .openmd-code-fence-marker {

@@ -23,6 +23,12 @@ import {
 import { openMdInsertMenuConfig } from './insert-menu-config'
 import { createOpenMdImageFeature, type RendererImagesApi } from './image-feature'
 import { listEditingPlugin } from './list-editing-plugin'
+import { openMdListItemView } from './list-item-view'
+import {
+  configureSafeMarkdownLinks,
+  markdownCompatibilityPlugins,
+  prepareMarkdownCompatibility,
+} from './markdown-compatibility-feature'
 import { createOpenMdMathFeature, openMdMathFeatures } from './math-feature'
 import { createOpenMdMermaidFeature } from './mermaid-feature'
 import type { OutlineItem } from './outline-feature'
@@ -36,6 +42,7 @@ import type {
 } from './editor.types'
 import { createOpenMdFormattingFeature } from './formatting-feature'
 import { createDocumentSearchFeature } from './search-feature'
+import { reconcileSerializedMarkdown } from './source-fidelity'
 import { createWritingModesFeature } from './writing-modes-feature'
 import type { TypewriterBehavior } from '../../../shared/settings'
 
@@ -78,8 +85,10 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
   private readonly formattingFeature: ReturnType<typeof createOpenMdFormattingFeature>
   private readonly searchFeature: ReturnType<typeof createDocumentSearchFeature>
   private readonly writingModesFeature: ReturnType<typeof createWritingModesFeature>
+  private readonly compatibilitySetup: Promise<void>
   private readonly unsubscribeOutline: Array<() => void>
   private markdown: string
+  private serializedMarkdown = ''
   private markdownDocument: ProseMirrorNode | null = null
   private programmaticDocument: ProseMirrorNode | null = null
   private destroyed = false
@@ -143,7 +152,7 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
         ...openMdTableFeatures,
         ...openMdMathFeatures,
         [CrepeFeature.CodeMirror]: true,
-        [CrepeFeature.ListItem]: true,
+        [CrepeFeature.ListItem]: false,
         [CrepeFeature.LinkTooltip]: false,
         [CrepeFeature.BlockEdit]: true,
         [CrepeFeature.Toolbar]: false,
@@ -157,6 +166,7 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
     this.crepe.editor.config(configureOpenMdCodeBlocks)
     this.crepe.editor.config(this.mathFeature.configure)
     this.crepe.editor.config(this.mermaidFeature.configureCodeBlocks)
+    this.crepe.editor.config(configureSafeMarkdownLinks)
     this.crepe.editor.config(this.outlineFeature.configure)
     this.crepe.editor.config(this.imageFeature.configureUpload)
     this.crepe.editor.config((ctx) => {
@@ -173,7 +183,9 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
     this.crepe.editor.use(headingSourcePlugin)
     this.crepe.editor.use(inlineSourcePlugin)
     this.crepe.editor.use(blockSourcePlugin)
+    this.crepe.editor.use(markdownCompatibilityPlugins)
     this.crepe.editor.use(listEditingPlugin)
+    this.crepe.editor.use(openMdListItemView)
     this.crepe.editor.use(openMdTablePlugins)
     this.crepe.editor.use(this.imageFeature.plugins)
     this.crepe.editor.use(this.mathFeature.plugins)
@@ -182,6 +194,7 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
     this.crepe.editor.use(this.formattingFeature)
     this.crepe.editor.use(this.searchFeature.plugin)
     this.crepe.editor.use(this.writingModesFeature.plugin)
+    this.compatibilitySetup = prepareMarkdownCompatibility(this.crepe.editor)
 
     this.crepe.setReadonly(options.readOnly).on((listener) => {
       listener.markdownUpdated((ctx, markdown) => {
@@ -205,14 +218,22 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
         if (this.programmaticDocument?.eq(state.doc)) return
 
         this.programmaticDocument = null
-        this.markdown = markdown
+        const previousMarkdown = this.markdown
+        const reconciled = reconcileSerializedMarkdown(
+          previousMarkdown,
+          this.serializedMarkdown,
+          markdown,
+        )
+        this.markdown = reconciled.markdown
+        this.serializedMarkdown = markdown
         this.markdownDocument = state.doc
-        options.onChange(markdown)
+        if (this.markdown !== previousMarkdown) options.onChange(this.markdown)
       })
     })
   }
 
   async create(): Promise<void> {
+    await this.compatibilitySetup
     await this.crepe.create()
     this.created = true
     if (this.destroyed) {
@@ -251,7 +272,13 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
       if (this.markdownDocument?.eq(document)) return
 
       this.programmaticDocument = null
-      this.markdown = ctx.get(serializerCtx)(document)
+      const serialized = ctx.get(serializerCtx)(document)
+      this.markdown = reconcileSerializedMarkdown(
+        this.markdown,
+        this.serializedMarkdown,
+        serialized,
+      ).markdown
+      this.serializedMarkdown = serialized
       this.markdownDocument = document
     })
     return this.markdown
@@ -270,7 +297,12 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
 
   private applyMarkdown(markdown: string): void {
     this.crepe.editor.action(replaceAll(markdown, true))
-    this.captureMarkdownDocument(true)
+    this.crepe.editor.action((ctx) => {
+      const document = ctx.get(editorViewCtx).state.doc
+      this.markdownDocument = document
+      this.programmaticDocument = document
+      this.serializedMarkdown = ctx.get(serializerCtx)(document)
+    })
   }
 
   private captureMarkdownDocument(programmatic = false): void {
@@ -278,6 +310,7 @@ export class OpenMdEditorAdapter implements EditorDocumentAdapter {
       const document = ctx.get(editorViewCtx).state.doc
       this.markdownDocument = document
       this.programmaticDocument = programmatic ? document : null
+      this.serializedMarkdown = ctx.get(serializerCtx)(document)
     })
   }
 

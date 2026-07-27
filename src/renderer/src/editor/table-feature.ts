@@ -4,6 +4,7 @@ import { commandsCtx } from '@milkdown/kit/core'
 import { insertTableCommand } from '@milkdown/kit/preset/gfm'
 
 import { tableContextMenuPlugin } from './table-context-menu-plugin'
+import { tableClipboardPlugin } from './table-clipboard-plugin'
 import { tableNavigationPlugin } from './table-navigation-plugin'
 
 export const OPENMD_DEFAULT_TABLE_ROWS = 3
@@ -15,7 +16,11 @@ export const openMdTableFeatures = {
 } satisfies Partial<Record<CrepeFeature, boolean>>
 
 /** Register these after constructing Crepe and before calling `create()`. */
-export const openMdTablePlugins = [tableNavigationPlugin, tableContextMenuPlugin]
+export const openMdTablePlugins = [
+  tableNavigationPlugin,
+  tableClipboardPlugin,
+  tableContextMenuPlugin,
+]
 
 export interface InsertGfmTableOptions {
   rows?: number

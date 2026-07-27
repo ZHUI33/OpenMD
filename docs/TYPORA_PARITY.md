@@ -80,3 +80,33 @@
   `Ctrl+Tab`、关闭/恢复、滚动恢复和设置重启持久化。
 - 截图：`docs/images/typora-parity-phase2-find.png`、
   `docs/images/typora-parity-phase2-quick-open.png`。
+
+## Markdown 兼容性阶段
+
+这一阶段的验收标准不是“能显示大多数 Markdown”，而是任何内容进入可视化模式后都不能
+静默丢失。详细保留与归一化边界见
+[Markdown 兼容性与源码保真](MARKDOWN_COMPATIBILITY.md)。
+
+| 能力          | 实现                                                                                                                                               | 验证                                                                    | 状态   |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------ |
+| 兼容语料库    | `tests/fixtures/markdown-compatibility/` 覆盖 YAML、GFM、脚注、引用/自动链接、Alerts、公式、Mermaid、代码、HTML、Unicode、换行、图片路径和复杂结构 | 所有 fixture 未编辑 visual 往返逐字符相等；LF/CRLF/混合换行使用真实字节 | 已完成 |
+| 源码保真      | 原始源码作为规范状态；序列化前后最小差异映射回原文，只替换实际编辑范围                                                                             | YAML、围栏、HTML、同义标记和混合换行的局部编辑测试                      | 已完成 |
+| YAML / 原始块 | Front Matter、HTML 和暂不支持的 `:::` 扩展容器使用隔离源码 NodeView；均可编辑                                                                      | 安全编辑、无执行、无跨块吞并、精确往返测试                              | 已完成 |
+| 脚注与 Alerts | 脚注跳转、键盘操作、纯文本悬浮预览；五种 GFM Alert 可视化编辑                                                                                      | DOM 交互、序列化和所有类型覆盖                                          | 已完成 |
+| 链接兼容      | 保留 full/collapsed/shortcut 引用与定义；定义 URL/标题可编辑；支持尖括号、邮箱和裸链接                                                             | 引用解析/编辑、中文标点边界和危险协议测试                               | 已完成 |
+| 表格完整编辑  | 对齐、行列插入/删除、Tab 导航、末格新增行、TSV 矩形复制粘贴                                                                                        | 序列化、命令、DOM 集成和剪贴板矩形测试                                  | 已完成 |
+| 复杂输入      | 任务项使用稳定 NodeView；视觉/源码均覆盖中文 composition；emoji、组合 Unicode、跨节点选区与 undo/redo                                              | Vitest 与 Electron E2E                                                  | 已完成 |
+| 安全边界      | 原始 HTML 不进入活动 DOM；危险链接不可导航；DOMPurify、CSP、协议白名单、IPC 校验保持开启                                                           | Renderer 安全测试、IPC/协议既有测试和 E2E                               | 已完成 |
+
+### 兼容性验收
+
+1. 以源码模式打开 `all-features.md`，切换可视化再切回；内容完全一致且标签不变脏。
+2. 修改正文后确认 YAML、波浪线代码围栏、HTML 和文档各处换行仍保持原样。
+3. 修改脚注、引用定义、Alert 和原始块，保存后重新打开，语义与用户输入一致。
+4. 在表格中执行对齐、行列增删、Tab 导航和跨应用矩形复制粘贴。
+5. 使用中文输入法输入 emoji/组合字符，对跨多个 inline 节点的选区执行替换、撤销和重做。
+6. 在原始 HTML 中放入脚本、事件属性和危险 URL，确认它们只作为源码显示且不会执行。
+
+验证记录（2026-07-27）：`pnpm format:check`、`pnpm lint`、`pnpm typecheck`、
+`pnpm test` 和 `pnpm build` 全部通过；46 个 Vitest 文件 / 279 项测试通过；
+`pnpm test:e2e` 的 2 项 Electron 工作流全部通过。

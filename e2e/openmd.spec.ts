@@ -83,6 +83,47 @@ async function selectText(page: Page, text: string): Promise<void> {
   }, text)
 }
 
+async function selectTextRange(page: Page, startText: string, endText: string): Promise<void> {
+  await page.locator('.ProseMirror').evaluate(
+    (editor, rangeText) => {
+      editor.focus()
+      const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT)
+      let startNode: Node | undefined
+      let endNode: Node | undefined
+      let startOffset = -1
+      let endOffset = -1
+      while (walker.nextNode()) {
+        const node = walker.currentNode
+        const text = node.textContent ?? ''
+        if (!startNode) {
+          const offset = text.indexOf(rangeText.startText)
+          if (offset >= 0) {
+            startNode = node
+            startOffset = offset
+          }
+        }
+        const offset = text.indexOf(rangeText.endText)
+        if (startNode && offset >= 0) {
+          endNode = node
+          endOffset = offset + rangeText.endText.length
+          break
+        }
+      }
+      if (!startNode || !endNode) {
+        throw new Error(`Text range not found: ${rangeText.startText}…${rangeText.endText}`)
+      }
+      const selection = document.getSelection()
+      const range = document.createRange()
+      range.setStart(startNode, startOffset)
+      range.setEnd(endNode, endOffset)
+      selection?.removeAllRanges()
+      selection?.addRange(range)
+      document.dispatchEvent(new Event('selectionchange', { bubbles: true }))
+    },
+    { endText, startText },
+  )
+}
+
 test('focused writing workflow, formatting, and sidebar settings survive restart', async () => {
   const root = await mkdtemp(join(tmpdir(), 'openmd-e2e-'))
   const workspacePath = join(root, 'Writing')
@@ -163,6 +204,20 @@ test('focused writing workflow, formatting, and sidebar settings survive restart
     expect(page.url()).toBe(pageUrl)
     await linkInput.press('Escape')
 
+    await selectTextRange(page, 'Toolbar bold', 'Keyboard bold')
+    await page.keyboard.insertText('跨节点临时编辑 👩🏽‍💻')
+    await expect(page.locator('.ProseMirror')).toContainText('跨节点临时编辑 👩🏽‍💻')
+    await page.keyboard.press(`${shortcutModifier}+Z`)
+    await expect(page.locator('.ProseMirror strong', { hasText: 'Toolbar bold' })).toHaveCount(1)
+    await expect(page.locator('.ProseMirror strong', { hasText: 'Keyboard bold' })).toHaveCount(1)
+    await page.keyboard.press(
+      process.platform === 'darwin' ? `${shortcutModifier}+Shift+Z` : `${shortcutModifier}+Y`,
+    )
+    await expect(page.locator('.ProseMirror')).toContainText('跨节点临时编辑 👩🏽‍💻')
+    await page.keyboard.press(`${shortcutModifier}+Z`)
+    await expect(page.locator('.ProseMirror strong', { hasText: 'Toolbar bold' })).toHaveCount(1)
+    await expect(page.locator('.ProseMirror strong', { hasText: 'Keyboard bold' })).toHaveCount(1)
+
     await expect(
       page.evaluate(() => window.openmd.openExternalUrl({ url: 'javascript:alert(1)' })),
     ).rejects.toThrow(/protocol/u)
@@ -188,8 +243,8 @@ test('focused writing workflow, formatting, and sidebar settings survive restart
     await compositionParagraph.click()
     await page.keyboard.press('End')
     await page.locator('.ProseMirror').dispatchEvent('compositionstart', { data: '' })
-    await page.keyboard.insertText('中文输入')
-    await page.locator('.ProseMirror').dispatchEvent('compositionend', { data: '中文输入' })
+    await page.keyboard.insertText('中文输入 👩🏽‍💻é')
+    await page.locator('.ProseMirror').dispatchEvent('compositionend', { data: '中文输入 👩🏽‍💻é' })
 
     await runMenuCommand(application, 'openmd-document-save')
     await expect
@@ -199,7 +254,7 @@ test('focused writing workflow, formatting, and sidebar settings survive restart
     expect(savedMarkdown).toMatch(/\*\*Toolbar bold\*\*/u)
     expect(savedMarkdown).toMatch(/\*\*Keyboard bold\*\*/u)
     expect(savedMarkdown).toMatch(/[*_]Keyboard italic[*_]/u)
-    expect(savedMarkdown.match(/中文输入/gu)).toHaveLength(1)
+    expect(savedMarkdown.match(/中文输入 👩🏽‍💻é/gu)).toHaveLength(1)
     expect(savedMarkdown).not.toMatch(/data-openmd|<span|<strong/iu)
 
     await page.getByRole('tab', { name: '文件' }).click()
@@ -356,6 +411,7 @@ test('phase two find, quick open, tab shortcuts, focus and typewriter workflow',
       fullPage: true,
     })
     await quickOpenInput.press('Enter')
+    await expect(page.getByRole('dialog', { name: '快速打开' })).toBeHidden()
     await expect(page.getByRole('tab', { name: /second-note\.md/u })).toHaveAttribute(
       'aria-selected',
       'true',
@@ -365,6 +421,7 @@ test('phase two find, quick open, tab shortcuts, focus and typewriter workflow',
     await page.getByRole('combobox').fill('second')
     await expect(page.getByRole('option', { name: /second-note\.md/u })).toBeVisible()
     await page.getByRole('combobox').press('Enter')
+    await expect(page.getByRole('dialog', { name: '快速打开' })).toBeHidden()
     await expect(page.getByRole('tab', { name: /second-note\.md/u })).toHaveCount(1)
 
     await page.keyboard.press(`${shortcutModifier}+W`)

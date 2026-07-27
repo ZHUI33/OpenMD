@@ -1,6 +1,8 @@
 // @vitest-environment jsdom
 
 import { EditorView } from '@codemirror/view'
+import { readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { act, createElement, createRef } from 'react'
 import { createRoot } from 'react-dom/client'
 import type { Root } from 'react-dom/client'
@@ -198,6 +200,25 @@ describe('editor mode host integration', () => {
     expect(handle.getMarkdown()).toBe(markdown)
     await act(async () => handle.setMode('source'))
 
+    expect(handle.getMarkdown()).toBe(markdown)
+    expect(changes).toEqual([])
+  })
+
+  it('round-trips the compatibility corpus through source and visual modes without becoming dirty', async () => {
+    const markdown = readFileSync(
+      resolve('tests/fixtures/markdown-compatibility/all-features.md'),
+      'utf8',
+    )
+    const { container, handle, changes } = await mountEditor(markdown, 'source')
+
+    await act(async () => handle.setMode('visual'))
+    expect(container.querySelector('[data-openmd-raw-editor="frontmatter"]')).not.toBeNull()
+    expect(container.querySelector('[data-openmd-alert="NOTE"]')).not.toBeNull()
+    expect(container.querySelector('[data-openmd-link-reference]')).not.toBeNull()
+    expect(container.querySelector('.openmd-footnote-reference')).not.toBeNull()
+    expect(handle.getMarkdown()).toBe(markdown)
+
+    await act(async () => handle.setMode('source'))
     expect(handle.getMarkdown()).toBe(markdown)
     expect(changes).toEqual([])
   })

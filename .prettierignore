@@ -3,3 +3,6 @@ out
 dist
 coverage
 pnpm-lock.yaml
+# Compatibility fixtures intentionally preserve non-canonical Markdown and
+# LF/CRLF/mixed line endings byte-for-byte.
+tests/fixtures/markdown-compatibility/

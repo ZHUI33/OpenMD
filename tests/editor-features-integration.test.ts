@@ -112,10 +112,17 @@ describe('phase 4 editor features', () => {
     const menu = document.querySelector('.openmd-table-context-menu')
     expect(menu?.getAttribute('data-open')).toBe('true')
     expect(menu?.textContent).toContain('删除表格')
-    const centerColumn = [...(menu?.querySelectorAll('button') ?? [])].find(
-      (button) => button.textContent === '列居中',
-    )
-    centerColumn?.click()
+    const runTableAction = (label: string, selector = 'td'): void => {
+      root
+        .querySelector(selector)
+        ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
+      const action = [...(menu?.querySelectorAll('button') ?? [])].find(
+        (button) => button.textContent === label,
+      )
+      expect(action, label).toBeDefined()
+      action?.click()
+    }
+    runTableAction('列居中')
 
     const saved = adapter.getMarkdown()
     expect(saved).toContain('| OpenMD')
@@ -123,13 +130,16 @@ describe('phase 4 editor features', () => {
     expect(saved).toContain('```java')
     expect(saved).not.toMatch(/<table|data-openmd|milkdown/i)
 
-    root
-      .querySelector('td')
-      ?.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true }))
-    const deleteTable = [...(menu?.querySelectorAll('button') ?? [])].find(
-      (button) => button.textContent === '删除表格',
-    )
-    deleteTable?.click()
+    runTableAction('在下方插入行')
+    expect(root.querySelectorAll('table tr')).toHaveLength(3)
+    runTableAction('在右侧插入列')
+    expect(root.querySelectorAll('table tr:first-child th')).toHaveLength(3)
+    runTableAction('删除行')
+    expect(root.querySelectorAll('table tr')).toHaveLength(2)
+    runTableAction('删除列')
+    expect(root.querySelectorAll('table tr:first-child th')).toHaveLength(2)
+
+    runTableAction('删除表格')
     expect(adapter.getMarkdown()).not.toContain('| OpenMD')
     expect(root.querySelector('.milkdown-table-block')).toBeNull()
   })
