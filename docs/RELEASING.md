@@ -2,14 +2,15 @@
 
 ## 发布前检查
 
-1. 更新版本、`CHANGELOG.md` 和发布说明。
+1. 更新版本、`CHANGELOG.md` 和 `.github/release-notes/<Tag>.md` 发布说明。
 2. 在 Windows 与 macOS 分别完成人工安装、启动、保存、文件关联、HTML/PDF/PNG 导出和卸载检查。
 3. 运行 `pnpm lint`、`pnpm typecheck`、`pnpm test:unit`、`pnpm build`、`pnpm test:e2e`。
 4. 运行 `pnpm benchmark:fixtures` 和 `pnpm benchmark`，把毫秒数据与同一设备上的上一个发布版本比较。
 5. 验收浅色/深色、125%/150% 缩放、高对比度、减弱动画、完整键盘和焦点恢复截图。
 6. 强制结束一次带未命名/未保存标签的进程，验证恢复入口、摘要、工作区/活动标签恢复和不覆盖原文件。
 7. 确认仓库、Actions 日志和产物不包含证书、密码、Token 或本机路径。
-8. 推送形如 `v0.1.0` 的标签；Release workflow 会生成平台产物并创建/更新草稿 Release。
+8. 确认版本化发布说明存在后推送形如 `v0.2.0` 的标签；Release workflow 会生成平台产物、
+   `SHA256SUMS.txt` 并创建/更新草稿 Release。
 
 ## 未签名测试包
 
@@ -40,12 +41,13 @@ Workflow 只在运行时把它们映射给 electron-builder 的 `CSC_LINK` 和 `
 存在有效发布元数据时检查；异常不会阻止启动。发现版本后先询问是否下载，下载完成后再询问是否重启安装。
 
 Release workflow 使用 GitHub 自动提供的 `github.token` 上传产物，不需要把个人 Token 写入仓库。发布前
-检查草稿 Release 中同时存在安装包、DMG、更新 YAML 和 blockmap，再手动发布草稿。
+检查草稿 Release 中同时存在安装包、DMG、更新 YAML、blockmap 和 `SHA256SUMS.txt`，核对 Release
+指向的提交、签名状态与发布说明后再手动发布草稿。
 
 ## 仍需人工完成
 
 - 购买/配置 Windows 代码签名证书。
 - 配置 Apple Developer 证书、公证凭据并验证两种架构。
 - 在真实 Windows 10/11、Intel Mac 和 Apple Silicon Mac 上验收。
-- 补充 README 功能截图、发布说明和校验和。
+- 补充 README 功能截图和面向用户的发布说明，并抽查自动生成的 SHA-256。
 - 将草稿 GitHub Release 手动切换为公开发布。

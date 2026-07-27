@@ -79,17 +79,25 @@ jobs:
     needs: package
     runs-on: ubuntu-latest
     steps:
+      - name: Checkout release notes
+        uses: actions/checkout@v4
       - name: Download packaged artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: openmd-*-${{ github.ref_name }}
           path: dist
           merge-multiple: true
+      - name: Generate SHA-256 checksums
+        working-directory: dist
+        run: >-
+          find . -maxdepth 1 -type f ! -name SHA256SUMS.txt -print0 |
+          sort -z |
+          xargs -0 sha256sum > SHA256SUMS.txt
       - name: Create GitHub draft release
         uses: softprops/action-gh-release@v2
         with:
           draft: true
-          generate_release_notes: true
+          body_path: .github/release-notes/${{ github.ref_name }}.md
           name: OpenMD ${{ github.ref_name }}
           fail_on_unmatched_files: true
           files: |
@@ -97,3 +105,4 @@ jobs:
             dist/*.dmg
             dist/*.yml
             dist/*.blockmap
+            dist/SHA256SUMS.txt

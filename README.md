@@ -44,6 +44,13 @@
 
 > 当前测试包可能尚未完成商业代码签名。请只从本仓库 Releases 下载，并核对 Release 中提供的校验值。正式发布前的签名状态会在每个 Release 中明确标注。
 
+### 系统要求
+
+- Windows 10/11 x64，或 macOS 12 Monterey 及以上版本。
+- macOS 分别提供 Apple Silicon（arm64）和 Intel（x64）安装包。
+- 最小窗口尺寸为 800 × 600；安装版运行不需要另装 Node.js 或 pnpm。
+- Linux 和 Windows ARM64 暂无正式安装包。
+
 ## 3 分钟上手
 
 1. 按 `Ctrl/Cmd + N` 新建文档，直接像普通文字编辑器一样输入内容。
@@ -51,7 +58,8 @@
 3. 点击右上角“设置”开启自动保存，默认在停止输入 1.5 秒后保存。
 4. 按 `Ctrl/Cmd + /` 在所见即所得与 Markdown 源码之间切换。
 5. 点击“打开文件夹”，用左侧文件树管理一组笔记或项目文档。
-6. 点击“导出 HTML”“导出 PDF”或“导出长图 PNG”，生成可以分享的成品文档。
+6. 按 `Ctrl/Cmd + F` 查找当前文档，或按 `Ctrl/Cmd + P` 快速打开工作区文件。
+7. 点击“导出 HTML”“导出 PDF”或“导出长图 PNG”，生成可以分享的成品文档。
 
 最常用快捷键：
 
@@ -60,8 +68,11 @@
 | 新建         | `Ctrl + N`         | `Cmd + N`         |
 | 打开文件     | `Ctrl + O`         | `Cmd + O`         |
 | 打开文件夹   | `Ctrl + Shift + O` | `Cmd + Shift + O` |
+| 快速打开     | `Ctrl + P`         | `Cmd + P`         |
 | 保存         | `Ctrl + S`         | `Cmd + S`         |
+| 查找 / 替换  | `Ctrl + F` / `H`   | `Cmd + F` / `H`   |
 | 切换编辑模式 | `Ctrl + /`         | `Cmd + /`         |
+| 专注/打字机  | `F8` / `F9`        | `F8` / `F9`       |
 | 工作区搜索   | `Ctrl + Shift + F` | `Cmd + Shift + F` |
 | 导出 HTML    | `Ctrl + Alt + H`   | `Cmd + Alt + H`   |
 | 导出 PDF     | `Ctrl + Alt + P`   | `Cmd + Alt + P`   |
@@ -120,6 +131,31 @@ flowchart LR
 - Markdown-it、Highlight.js、KaTeX、Mermaid、DOMPurify
 - electron-builder、electron-updater
 - Vitest、React Testing Library、Playwright Electron
+
+## 启动方式、输入输出与配置
+
+安装版通常从开始菜单、桌面快捷方式或 macOS“应用程序”启动，也可以双击关联的 `.md` /
+`.markdown` 文件。OpenMD 没有面向用户的子命令或配置类命令行参数；可执行文件只识别第一个
+以 `.md` 或 `.markdown` 结尾的位置参数。例如：
+
+```powershell
+& 'C:\安装位置\OpenMD.exe' 'D:\文档\示例.md'
+```
+
+```bash
+open -a OpenMD "/Users/me/Documents/example.md"
+```
+
+“打开”对话框还支持 UTF-8 `.txt`；工作区默认显示 `.md` / `.markdown`，开启“文件树显示普通
+文本文件”后也显示 `.txt`。保存新文档时默认建议 `未命名.md`，但最终位置始终由用户选择。
+已保存文档导出 HTML/PDF/PNG 时，默认建议放在原文档目录并沿用文件名；未保存文档会根据标题
+建议文件名。每次导出仍会显示保存对话框。
+
+应用设置写入 Electron `userData/settings.json`，最近文件、用户主题和异常恢复分别位于同一目录
+下的 `recent-files.json`、`themes/` 和 `recovery/`。Windows 通常是
+`%APPDATA%\openmd`，macOS 通常是 `~/Library/Application Support/openmd`；应优先在应用设置
+界面修改配置。普通安装版不要求环境变量；源码开发和签名发布所用变量见
+[发布指南](docs/RELEASING.md)。
 
 ## 本地开发
 
@@ -181,15 +217,23 @@ pnpm dist:mac
 
 ## 路线图
 
-- `0.1.x`：MVP 回归修复、安装体验和真实平台发布验收。
+- `0.2.x`：回归修复、安装体验和真实平台发布验收。
 - 发布准备：Windows/macOS 真实签名、公证及安装矩阵验收。
 - 后续版本：导出模板、更多主题和国际化。
 
 账号、云同步、在线协作和 AI 不在当前路线图范围内。
 
+## 从 0.1.0 升级
+
+- `0.2.0` 没有已知的破坏性变更，可以直接安装覆盖 `0.1.0`。
+- 首次启动会校验并迁移 `settings.json`；原有 Markdown、最近文件和用户主题无需转换。
+- 新的恢复记录只用于异常退出，不会覆盖原文档；重要文档仍建议在升级前自行备份。
+- 如果要回退到 `0.1.0`，先关闭 OpenMD 并备份 `userData` 目录；旧版会忽略它不认识的新设置，
+  但不保证识别 `0.2.0` 的恢复会话。
+
 ## 已知限制
 
-- 测试构建默认未签名，正式发布需要平台证书和 Apple 公证。
+- 未配置签名 Secrets 的构建产物不带商业代码签名或 Apple 公证，Release 会明确标注其状态。
 - Base64 HTML 导出只嵌入已授权的本地图片；不会主动下载远程图片。
 - PDF 中的远程图片依赖导出时的网络状态。
 - 单张 PNG 高度上限为 32,000 px，且总像素不超过 8,000 万；超限文档需拆分。

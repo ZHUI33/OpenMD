@@ -4,6 +4,9 @@
 
 [返回项目首页](../README.md) · [下载最新版](https://github.com/ZHUI33/OpenMD/releases/latest) · [反馈问题](https://github.com/ZHUI33/OpenMD/issues)
 
+OpenMD 支持 Windows 10/11 x64，以及 macOS 12 Monterey 或更高版本的 Intel/Apple Silicon
+设备；安装版不需要另装 Node.js。Linux 和 Windows ARM64 暂无正式安装包。
+
 ## 第一次使用
 
 1. 打开 OpenMD。
@@ -34,6 +37,10 @@ OpenMD 默认使用所见即所得模式。Markdown 标记会转换为标题、�
 ### 打开单个文件
 
 选择“文件 → 打开”、按 `Ctrl/Cmd + O`，或者在安装后直接双击 `.md` / `.markdown` 文件。
+“打开”对话框也支持 UTF-8 `.txt` 文件。安装版没有子命令或配置类命令行参数，只接受第一个
+`.md` / `.markdown` 文件位置参数；Windows 可从自选安装目录运行
+`OpenMD.exe "D:\文档\示例.md"`，macOS 可运行
+`open -a OpenMD "/Users/me/Documents/example.md"`。
 
 ### 打开文件夹工作区
 
@@ -50,6 +57,15 @@ OpenMD 默认使用所见即所得模式。Markdown 标记会转换为标题、�
 - 另存为：`Ctrl/Cmd + Shift + S`
 
 关闭有未保存修改的标签页或退出应用时，OpenMD 会要求确认，不会静默丢弃修改。
+
+### 输入、输出与默认位置
+
+- 输入：`.md`、`.markdown` 和 UTF-8 `.txt`；系统文件关联和位置参数仅覆盖 Markdown 扩展名。
+- 文档保存：新建文档默认建议 `未命名.md`，最终目录和文件名由用户选择。
+- 图片：按设置中的资源目录规则复制到 `文档名.assets`、`assets`、工作区 `assets` 或自定义相对目录。
+- 导出：HTML、PDF 和 PNG 每次都询问保存位置；已保存文档默认建议原目录和原文件名，
+  未保存文档根据标题建议文件名。
+- 应用不会创建默认“文档库”，也不会把正文自动上传到网络位置。
 
 ### 草稿与异常退出恢复
 
@@ -303,6 +319,20 @@ Markdown 与 YAML 中的内容不会被当作命令执行。导出仍遵守 CSP�
 - 图片资源目录。
 - 文件树是否显示普通文本文件。
 
+### 配置文件、数据目录与环境变量
+
+设置保存在 Electron `userData/settings.json`，由应用校验、自动迁移并原子写入；应优先使用设置
+界面修改。Windows 的 `userData` 通常位于 `%APPDATA%\openmd`，macOS 通常位于
+`~/Library/Application Support/openmd`。同一目录还包含：
+
+- `recent-files.json`：最近文件列表。
+- `themes/`：用户主题 CSS。
+- `recovery/`：异常退出恢复记录。
+
+普通安装和日常使用不要求任何环境变量。`OPENMD_DISABLE_UPDATE_CHECKS=1` 只供源码开发和自动化
+场景关闭启动更新检查；E2E、签名与发布变量不是用户配置，见[发布指南](RELEASING.md)。如果配置
+损坏，可在设置窗口使用“恢复默认值”；不要在应用运行时手工改写 `settings.json`。
+
 ## 快捷键
 
 表格中的 `Ctrl/Cmd` 表示 Windows 使用 `Ctrl`，macOS 使用 `Cmd`。
@@ -335,6 +365,24 @@ Markdown 与 YAML 中的内容不会被当作命令执行。导出仍遵守 CSP�
 - Renderer 无法直接调用 Node.js；文件操作通过受限桌面 API 完成。
 - 自动更新仅在发布版中使用 GitHub Releases，并可以在设置中关闭。
 
+## 从 0.1.0 升级
+
+可以直接安装 `0.2.0` 覆盖 `0.1.0`。首次启动会把旧设置迁移到当前 schema；Markdown 文档、
+最近文件和用户主题不需要转换。本版本新增的查找替换、快速打开、写作模式、Markdown 保真、
+异常恢复和导出选项均不要求修改旧文档。
+
+升级前仍建议备份重要文档。若需要回退，先完全退出 OpenMD 并备份整个 `userData` 目录；
+`0.1.0` 不保证识别 `0.2.0` 生成的恢复会话。
+
+## 已知限制
+
+- 未签名构建可能触发 Windows SmartScreen 或 macOS Gatekeeper；以对应 Release 的签名说明为准。
+- Linux、Windows ARM64 尚无正式安装包。
+- 多 MB 文档首次进入所见即所得模式会慢于源码模式。
+- 远程图片不会被 Base64 HTML 导出下载，PDF 中的远程图片依赖导出时网络。
+- 单张 PNG 高度上限为 32,000 px，总像素上限为 8,000 万。
+- 自动更新没有增量下载进度界面，安装器和系统安全提示仍需按版本人工验收。
+
 ## 常见问题
 
 ### 为什么新文档没有自动保存？
@@ -355,7 +403,8 @@ Base64 模式只读取用户授权的本地图片，不会代替用户下载远�
 
 ### 安装时系统提示来源未知怎么办？
 
-确认安装包来自本仓库 Releases，并核对 Release 提供的 SHA-256 与签名说明。如果无法确认来源，请不要绕过系统安全提示，可以改为从源码启动或等待签名版本。
+确认安装包来自本仓库 Releases，并使用 Release 中的 `SHA256SUMS.txt` 核对 SHA-256 与签名说明。
+如果无法确认来源，请不要绕过系统安全提示，可以改为从源码启动或等待签名版本。
 
 ### 如何报告问题？
 
